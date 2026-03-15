@@ -2,11 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/ksrichard/easyraft"
-	"github.com/ksrichard/easyraft/discovery"
-	"github.com/ksrichard/easyraft/fsm"
-	"github.com/ksrichard/easyraft/serializer"
 	"log"
 	"net/http"
 	"os"
@@ -14,6 +9,12 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/ksrichard/easyraft"
+	"github.com/ksrichard/easyraft/discovery"
+	"github.com/ksrichard/easyraft/fsm"
+	"github.com/ksrichard/easyraft/serializer"
 )
 
 func main() {
