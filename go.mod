@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/Jille/raft-grpc-transport v1.2.0
-	github.com/grandcat/zeroconf v1.0.0
+	github.com/hashicorp/mdns v1.0.6
 	github.com/hashicorp/memberlist v0.3.0
 	github.com/hashicorp/raft v1.3.2
 	github.com/hashicorp/raft-boltdb v0.0.0-20210422161416-485fa74b0b01
@@ -21,7 +21,6 @@ require (
 require (
 	github.com/armon/go-metrics v0.3.9 // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
-	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/fatih/color v1.12.0 // indirect
 	github.com/go-logr/logr v0.4.0 // indirect

@@ -3,28 +3,31 @@ package discovery
 import (
 	"context"
 	"fmt"
-	"github.com/grandcat/zeroconf"
 	"log"
 	"math/rand"
 	"time"
+
+	"github.com/hashicorp/mdns"
 )
 
 const (
 	mdnsServiceName = "_easyraft._tcp"
+	mdnsDomain      = "local."
 )
 
 type MDNSDiscovery struct {
 	delayTime     time.Duration
 	nodeID        string
 	nodePort      int
-	mdnsServer    *zeroconf.Server
+	mdnsServer    *mdns.Server
 	discoveryChan chan string
 	stopChan      chan bool
 }
 
 func NewMDNSDiscovery() DiscoveryMethod {
-	rand.Seed(time.Now().UnixNano())
-	delayTime := time.Duration(rand.Intn(5)+1) * time.Second
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	delayTime := time.Duration(r.Intn(5)+1) * time.Second
+
 	return &MDNSDiscovery{
 		delayTime:     delayTime,
 		discoveryChan: make(chan string),
@@ -37,7 +40,9 @@ func (d *MDNSDiscovery) Start(nodeID string, nodePort int) (chan string, error) 
 	if d.discoveryChan == nil {
 		d.discoveryChan = make(chan string)
 	}
+
 	go d.discovery()
+
 	return d.discoveryChan, nil
 }
 
@@ -49,22 +54,18 @@ func (d *MDNSDiscovery) discovery() {
 	}
 	d.mdnsServer = mdnsServer
 
-	// fetch mDNS enabled raft nodes
-	resolver, err := zeroconf.NewResolver(nil)
-	if err != nil {
-		log.Fatalln("Failed to initialize mDNS resolver:", err.Error())
-	}
-	entries := make(chan *zeroconf.ServiceEntry)
+	entries := make(chan *mdns.ServiceEntry)
 	go func() {
 		for {
 			select {
 			case <-d.stopChan:
 				break
 			case entry := <-entries:
-				d.discoveryChan <- fmt.Sprintf("%s:%d", entry.AddrIPv4[0], entry.Port)
+				d.discoveryChan <- fmt.Sprintf("%s:%d", entry.AddrV4[0], entry.Port)
 			}
 		}
 	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	for {
 		select {
@@ -72,7 +73,11 @@ func (d *MDNSDiscovery) discovery() {
 			cancel()
 			break
 		default:
-			err = resolver.Browse(ctx, mdnsServiceName, "local.", entries)
+			params := mdns.DefaultParams(mdnsServiceName)
+			params.Domain = mdnsDomain
+			params.Entries = entries
+
+			err = mdns.QueryContext(ctx, params)
 			if err != nil {
 				log.Printf("Error during mDNS lookup: %v\n", err)
 			}
@@ -81,8 +86,21 @@ func (d *MDNSDiscovery) discovery() {
 	}
 }
 
-func (d *MDNSDiscovery) exposeMDNS() (*zeroconf.Server, error) {
-	return zeroconf.Register(d.nodeID, mdnsServiceName, "local.", d.nodePort, []string{"txtv=0", "lo=1", "la=2"}, nil)
+func (d *MDNSDiscovery) exposeMDNS() (*mdns.Server, error) {
+	service, err := mdns.NewMDNSService(
+		d.nodeID,
+		mdnsServiceName,
+		mdnsDomain,
+		"",
+		d.nodePort,
+		nil,
+		[]string{"txtv=0", "lo=1", "la=2"},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return mdns.NewServer(&mdns.Config{Zone: service})
 }
 
 func (d *MDNSDiscovery) SupportsNodeAutoRemoval() bool {
