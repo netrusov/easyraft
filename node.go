@@ -3,7 +3,17 @@ package easyraft
 import (
 	"errors"
 	"fmt"
-	"github.com/Jille/raft-grpc-transport"
+	"log"
+	"net"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"syscall"
+	"time"
+
+	transport "github.com/Jille/raft-grpc-transport"
 	"github.com/hashicorp/memberlist"
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
@@ -14,15 +24,6 @@ import (
 	"github.com/ksrichard/easyraft/util"
 	"github.com/zemirco/uid"
 	ggrpc "google.golang.org/grpc"
-	"log"
-	"net"
-	"os"
-	"os/signal"
-	"path/filepath"
-	"strings"
-	"sync/atomic"
-	"syscall"
-	"time"
 )
 
 type Node struct {

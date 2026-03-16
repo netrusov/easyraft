@@ -1,0 +1,25 @@
+volumes:
+  go-mod: {}
+
+services:
+  easyraft:
+    image: docker.io/golang:1.26.0-alpine
+    scale: 3
+    domainname: easyraft
+    working_dir: /app/examples/dns
+    command: go run main.go
+    volumes:
+      - "../../:/app"
+      - "go-mod:/go/pkg/mod"
+    environment:
+      EASYRAFT_PORT: "5000"
+      DISCOVERY_PORT: "5001"
+      HTTP_PORT: "5002"
+      DATA_DIR: "/data"
+
+  bind-tools:
+    build:
+      context: ./bind-tools/
+      dockerfile: Dockerfile
+    command: /bin/true
+    restart: no
