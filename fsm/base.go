@@ -3,12 +3,13 @@ package fsm
 import (
 	"errors"
 	"fmt"
-	"github.com/hashicorp/raft"
-	"github.com/ksrichard/easyraft/serializer"
 	"io"
 	"io/ioutil"
 	"log"
 	"strings"
+
+	"github.com/hashicorp/raft"
+	"github.com/netrusov/easyraft/serializer"
 )
 
 type RoutingFSM struct {

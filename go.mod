@@ -1,4 +1,4 @@
-module github.com/ksrichard/easyraft
+module github.com/netrusov/easyraft
 
 go 1.26.0
 

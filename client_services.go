@@ -2,7 +2,8 @@ package easyraft
 
 import (
 	"context"
-	rgrpc "github.com/ksrichard/easyraft/grpc"
+
+	rgrpc "github.com/netrusov/easyraft/grpc"
 )
 
 func NewClientGrpcService(node *Node) *ClientGrpcServices {

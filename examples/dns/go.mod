@@ -2,9 +2,9 @@ module dns
 
 go 1.26.0
 
-replace github.com/ksrichard/easyraft => ../../
+replace github.com/netrusov/easyraft => ../../
 
-require github.com/ksrichard/easyraft v0.0.0
+require github.com/netrusov/easyraft v0.0.0
 
 require (
 	github.com/Jille/raft-grpc-transport v1.2.0 // indirect

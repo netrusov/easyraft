@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ksrichard/easyraft"
-	"github.com/ksrichard/easyraft/discovery"
-	"github.com/ksrichard/easyraft/fsm"
-	"github.com/ksrichard/easyraft/serializer"
+	"github.com/netrusov/easyraft"
+	"github.com/netrusov/easyraft/discovery"
+	"github.com/netrusov/easyraft/fsm"
+	"github.com/netrusov/easyraft/serializer"
 )
 
 func main() {

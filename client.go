@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/ksrichard/easyraft/grpc"
+	"github.com/netrusov/easyraft/grpc"
 	ggrpc "google.golang.org/grpc"
 )
 

@@ -2,11 +2,11 @@ module webserver
 
 go 1.26.0
 
-replace github.com/ksrichard/easyraft => ../../
+replace github.com/netrusov/easyraft => ../../
 
 require (
 	github.com/gin-gonic/gin v1.7.7
-	github.com/ksrichard/easyraft v0.0.0
+	github.com/netrusov/easyraft v0.0.0
 )
 
 require (

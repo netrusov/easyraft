@@ -2,7 +2,7 @@ package fsm
 
 import (
 	"github.com/hashicorp/raft"
-	"github.com/ksrichard/easyraft/serializer"
+	"github.com/netrusov/easyraft/serializer"
 )
 
 // FSM is the interface for using Finite State Machine in Raft Cluster

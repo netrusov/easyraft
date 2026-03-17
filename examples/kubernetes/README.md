@@ -1,5 +1,5 @@
 <p align="center">
-   <img src="https://github.com/ksrichard/easyraft/raw/main/logo.png" width="50%">
+   <img src="https://github.com/netrusov/easyraft/raw/main/logo.png" width="50%">
 </p>
 
 ## HTTP based key-value store example on Kubernetes (webkvs)
