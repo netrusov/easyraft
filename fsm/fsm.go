@@ -21,11 +21,11 @@ type FSMService interface {
 
 	// NewLog is called when a new raft log message is committed in the cluster and matched with any of the GetReqDataTypes returned types
 	// in this method we can handle what should happen when we got a new raft log regarding our FSM service
-	NewLog(requestType interface{}, request map[string]interface{}) interface{}
+	NewLog(requestType any, request map[string]any) any
 
 	// GetReqDataTypes returns all the request structs which are used by this FSMService
-	GetReqDataTypes() []interface{}
+	GetReqDataTypes() []any
 
 	// ApplySnapshot is used to decode and apply a snapshot to the FSMService
-	ApplySnapshot(input interface{}) error
+	ApplySnapshot(input any) error
 }

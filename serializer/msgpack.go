@@ -11,12 +11,12 @@ func NewMsgPackSerializer() Serializer {
 type ConverterService struct {
 }
 
-func (s *ConverterService) Serialize(data interface{}) ([]byte, error) {
+func (s *ConverterService) Serialize(data any) ([]byte, error) {
 	return msgpack.Marshal(data)
 }
 
-func (s *ConverterService) Deserialize(data []byte) (interface{}, error) {
-	var result interface{}
+func (s *ConverterService) Deserialize(data []byte) (any, error) {
+	var result any
 	err := msgpack.Unmarshal(data, &result)
 	return result, err
 }

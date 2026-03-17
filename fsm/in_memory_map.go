@@ -2,14 +2,15 @@ package fsm
 
 import (
 	"errors"
-	"github.com/mitchellh/mapstructure"
 	"sync"
+
+	"github.com/mitchellh/mapstructure"
 )
 
 type MapPutRequest struct {
 	MapName string
 	Key     string
-	Value   interface{}
+	Value   any
 }
 
 type MapGetRequest struct {
@@ -24,7 +25,7 @@ type MapRemoveRequest struct {
 
 type Map struct {
 	sync.RWMutex
-	Data map[string]interface{}
+	Data map[string]any
 }
 
 type InMemoryMapService struct {
@@ -40,7 +41,7 @@ func (m *InMemoryMapService) Name() string {
 	return "in_memory_map"
 }
 
-func (m *InMemoryMapService) ApplySnapshot(input interface{}) error {
+func (m *InMemoryMapService) ApplySnapshot(input any) error {
 	var svc InMemoryMapService
 	err := mapstructure.Decode(input, &svc)
 	if err != nil {
@@ -50,7 +51,7 @@ func (m *InMemoryMapService) ApplySnapshot(input interface{}) error {
 	return nil
 }
 
-func (m *InMemoryMapService) NewLog(requestType interface{}, request map[string]interface{}) interface{} {
+func (m *InMemoryMapService) NewLog(requestType any, request map[string]any) any {
 	switch requestType.(type) {
 	case MapPutRequest:
 		var req MapPutRequest
@@ -80,16 +81,16 @@ func (m *InMemoryMapService) NewLog(requestType interface{}, request map[string]
 	}
 }
 
-func (m *InMemoryMapService) GetReqDataTypes() []interface{} {
-	return []interface{}{MapPutRequest{}, MapGetRequest{}, MapRemoveRequest{}}
+func (m *InMemoryMapService) GetReqDataTypes() []any {
+	return []any{MapPutRequest{}, MapGetRequest{}, MapRemoveRequest{}}
 }
 
-func (m *InMemoryMapService) Put(mapName string, key string, value interface{}) {
+func (m *InMemoryMapService) Put(mapName string, key string, value any) {
 	m.Lock()
 	defer m.Unlock()
 	fMap, found := m.Maps[mapName]
 	if !found {
-		m.Maps[mapName] = &Map{Data: map[string]interface{}{}}
+		m.Maps[mapName] = &Map{Data: map[string]any{}}
 		fMap = m.Maps[mapName]
 	}
 	fMap.Lock()
@@ -97,12 +98,12 @@ func (m *InMemoryMapService) Put(mapName string, key string, value interface{}) 
 	fMap.Data[key] = value
 }
 
-func (m *InMemoryMapService) Get(mapName string, key string) interface{} {
+func (m *InMemoryMapService) Get(mapName string, key string) any {
 	m.RLock()
 	defer m.RUnlock()
 	fMap, found := m.Maps[mapName]
 	if !found {
-		m.Maps[mapName] = &Map{Data: map[string]interface{}{}}
+		m.Maps[mapName] = &Map{Data: map[string]any{}}
 		fMap = m.Maps[mapName]
 	}
 	fMap.RLock()
@@ -115,7 +116,7 @@ func (m *InMemoryMapService) Remove(mapName string, key string) {
 	defer m.Unlock()
 	fMap, found := m.Maps[mapName]
 	if !found {
-		m.Maps[mapName] = &Map{Data: map[string]interface{}{}}
+		m.Maps[mapName] = &Map{Data: map[string]any{}}
 		fMap = m.Maps[mapName]
 	}
 	fMap.Lock()

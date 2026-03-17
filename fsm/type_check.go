@@ -5,8 +5,8 @@ import (
 	"reflect"
 )
 
-func getTargetType(types []interface{}, expectedFields []string) (interface{}, error) {
-	var result interface{} = nil
+func getTargetType(types []any, expectedFields []string) (any, error) {
+	var result any = nil
 	for _, i := range types {
 		// get current type fields list
 		v := reflect.ValueOf(i)

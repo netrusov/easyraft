@@ -42,7 +42,7 @@ type Node struct {
 	discoveryConfig  *memberlist.Config
 	stopped          *uint32
 	logger           *log.Logger
-	stoppedCh        chan interface{}
+	stoppedCh        chan any
 	snapshotEnabled  bool
 }
 
@@ -138,7 +138,7 @@ func NewNode(raftPort, discoveryPort int, dataDir string, services []fsm.FSMServ
 }
 
 // Start starts the Node and returns a channel that indicates, that the node has been stopped properly
-func (n *Node) Start() (chan interface{}, error) {
+func (n *Node) Start() (chan any, error) {
 	n.logger.Println("Starting Node...")
 	// set stopped as false
 	if atomic.LoadUint32(n.stopped) == 1 {
@@ -206,7 +206,7 @@ func (n *Node) Start() (chan interface{}, error) {
 	}()
 
 	n.logger.Printf("Node started on port %d and discovery port %d\n", n.RaftPort, n.DiscoveryPort)
-	n.stoppedCh = make(chan interface{})
+	n.stoppedCh = make(chan any)
 
 	return n.stoppedCh, nil
 }
@@ -303,7 +303,7 @@ func (n *Node) NotifyUpdate(_ *memberlist.Node) {
 
 // RaftApply is used to apply any new logs to the raft cluster
 // this method does automatic forwarding to Leader Node
-func (n *Node) RaftApply(request interface{}, timeout time.Duration) (interface{}, error) {
+func (n *Node) RaftApply(request any, timeout time.Duration) (any, error) {
 	payload, err := n.Serializer.Serialize(request)
 	if err != nil {
 		return nil, err

@@ -8,7 +8,7 @@ import (
 	ggrpc "google.golang.org/grpc"
 )
 
-func ApplyOnLeader(node *Node, payload []byte) (interface{}, error) {
+func ApplyOnLeader(node *Node, payload []byte) (any, error) {
 	if node.Raft.Leader() == "" {
 		return nil, errors.New("unknown leader")
 	}

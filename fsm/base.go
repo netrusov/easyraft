@@ -15,7 +15,7 @@ import (
 type RoutingFSM struct {
 	services            map[string]FSMService
 	ser                 serializer.Serializer
-	reqDataTypes        []interface{}
+	reqDataTypes        []any
 	reqServiceDataTypes map[string]FSMService
 }
 
@@ -26,7 +26,7 @@ func NewRoutingFSM(services []FSMService) FSM {
 	}
 	return &RoutingFSM{
 		services:            servicesMap,
-		reqDataTypes:        []interface{}{},
+		reqDataTypes:        []any{},
 		reqServiceDataTypes: map[string]FSMService{},
 	}
 }
@@ -41,7 +41,7 @@ func (i *RoutingFSM) Init(ser serializer.Serializer) {
 	}
 }
 
-func (i *RoutingFSM) Apply(log *raft.Log) interface{} {
+func (i *RoutingFSM) Apply(log *raft.Log) any {
 	switch log.Type {
 	case raft.LogCommand:
 		// deserialize
@@ -49,7 +49,7 @@ func (i *RoutingFSM) Apply(log *raft.Log) interface{} {
 		if err != nil {
 			return err
 		}
-		payloadMap := payload.(map[string]interface{})
+		payloadMap := payload.(map[string]any)
 
 		// check request type
 		var fields []string
@@ -84,7 +84,7 @@ func (i *RoutingFSM) Restore(closer io.ReadCloser) error {
 	if err != nil {
 		return err
 	}
-	s := servicesData.(map[string]interface{})
+	s := servicesData.(map[string]any)
 	for key, service := range i.services {
 		err = service.ApplySnapshot(s[key])
 		if err != nil {
