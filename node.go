@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -46,9 +47,16 @@ type Node struct {
 }
 
 // NewNode returns an EasyRaft node
-func NewNode(raftPort, discoveryPort int, dataDir string, services []fsm.FSMService, serializer serializer.Serializer, discoveryMethod discovery.DiscoveryMethod, snapshotEnabled bool) (*Node, error) {
+func NewNode(raftPort, discoveryPort int, dataDir string, services []fsm.FSMService, serializer serializer.Serializer, discoveryMethod discovery.DiscoveryMethod, snapshotEnabled bool, resolveAdvertiseAddr string) (*Node, error) {
+	advertiseAddr := "0.0.0.0"
+
+	// resolve which address will be used to announce to members
+	if resolveAdvertiseAddr != "" {
+		advertiseAddr = util.GetOutboundIP(resolveAdvertiseAddr).String()
+	}
+
 	// default raft config
-	addr := fmt.Sprintf("%s:%d", "0.0.0.0", raftPort)
+	addr := net.JoinHostPort(advertiseAddr, strconv.Itoa(raftPort))
 	nodeId := uid.New(50)
 	raftConf := raft.DefaultConfig()
 	raftConf.LocalID = raft.ServerID(nodeId)

@@ -33,6 +33,7 @@ func main() {
 		serializer.NewMsgPackSerializer(),
 		discovery.NewKubernetesDiscovery("", nil, ""),
 		false,
+		"",
 	)
 	if err != nil {
 		panic(err)

@@ -33,6 +33,7 @@ func main() {
 		serializer.NewMsgPackSerializer(),
 		discovery.NewMDNSDiscovery(),
 		false,
+		"",
 	)
 	if err != nil {
 		panic(err)

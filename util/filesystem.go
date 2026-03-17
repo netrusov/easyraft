@@ -1,6 +1,8 @@
 package util
 
-import "os"
+import (
+	"os"
+)
 
 // RemoveCreateDir - create a directory structure, if still exist -> delete it before
 func RemoveCreateDir(folderPath string) error {

@@ -35,6 +35,7 @@ func main() {
 		serializer.NewMsgPackSerializer(),
 		discovery.NewDNSDiscovery(dnsName, raftPort),
 		false,
+		"dummy",
 	)
 	if err != nil {
 		panic(err)

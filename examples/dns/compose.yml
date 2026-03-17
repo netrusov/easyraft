@@ -17,6 +17,10 @@ services:
       HTTP_PORT: "5002"
       DATA_DIR: "/data"
 
+  dummy:
+    image: busybox
+    command: sleep infinity
+
   bind-tools:
     build:
       context: ./bind-tools/
