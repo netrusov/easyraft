@@ -199,7 +199,7 @@ func (n *Node) Start() (chan any, error) {
 
 	// handle interruption
 	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGABRT, syscall.SIGKILL)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGABRT)
 	go func() {
 		_ = <-sigs
 		n.Stop()
