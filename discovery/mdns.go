@@ -2,9 +2,10 @@ package discovery
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"math/rand"
+	"net"
+	"strconv"
 	"time"
 
 	"github.com/hashicorp/mdns"
@@ -61,7 +62,7 @@ func (d *MDNSDiscovery) discovery() {
 			case <-d.stopChan:
 				break
 			case entry := <-entries:
-				d.discoveryChan <- fmt.Sprintf("%s:%d", entry.AddrV4[0], entry.Port)
+				d.discoveryChan <- net.JoinHostPort(entry.AddrV4.String(), strconv.Itoa(entry.Port))
 			}
 		}
 	}()
