@@ -6,12 +6,10 @@ import (
 	"log"
 	"net"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	transport "github.com/Jille/raft-grpc-transport"
@@ -44,7 +42,7 @@ type Node struct {
 	discoveryConfig  *memberlist.Config
 	stopped          *uint32
 	logger           *log.Logger
-	stoppedCh        chan any
+	stopCh           chan any
 	snapshotEnabled  bool
 }
 
@@ -151,6 +149,7 @@ func (n *Node) Start() (chan any, error) {
 	if atomic.LoadUint32(n.stopped) == 1 {
 		atomic.StoreUint32(n.stopped, 0)
 	}
+	n.stopCh = make(chan any, 1)
 
 	// raft server
 	configuration := raft.Configuration{
@@ -178,7 +177,7 @@ func (n *Node) Start() (chan any, error) {
 	// grpc server
 	grpcListen, err := net.Listen("tcp", n.address)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	grpcServer := grpc.NewServer()
 	n.GrpcServer = grpcServer
@@ -200,37 +199,37 @@ func (n *Node) Start() (chan any, error) {
 	// serve grpc
 	go func() {
 		if err := grpcServer.Serve(grpcListen); err != nil {
-			n.logger.Fatal(err)
+			if atomic.LoadUint32(n.stopped) == 0 {
+				n.logger.Printf("Raft server stopped with error: %q\n", err.Error())
+			}
 		}
 	}()
 
-	// handle interruption
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM, syscall.SIGABRT)
-	go func() {
-		_ = <-sigs
-		n.Stop()
-	}()
-
 	n.logger.Printf("Node started on port %d and discovery port %d\n", n.RaftPort, n.DiscoveryPort)
-	n.stoppedCh = make(chan any)
 
-	return n.stoppedCh, nil
+	return n.stopCh, nil
 }
 
 // Stop stops the node and notifies on stopped channel returned in Start
 func (n *Node) Stop() {
-	if atomic.LoadUint32(n.stopped) == 0 {
-		atomic.StoreUint32(n.stopped, 1)
-		if n.snapshotEnabled {
-			n.logger.Println("Creating snapshot...")
-			err := n.Raft.Snapshot().Error()
-			if err != nil {
-				n.logger.Println("Failed to create snapshot!")
-			}
+	if !atomic.CompareAndSwapUint32(n.stopped, 0, 1) {
+		return
+	}
+
+	if n.snapshotEnabled && n.Raft != nil {
+		n.logger.Println("Creating snapshot...")
+		err := n.Raft.Snapshot().Error()
+		if err != nil {
+			n.logger.Println("Failed to create snapshot!")
 		}
-		n.logger.Println("Stopping Node...")
+	}
+	n.logger.Println("Stopping Node...")
+
+	if n.DiscoveryMethod != nil {
 		n.DiscoveryMethod.Stop()
+	}
+
+	if n.mList != nil {
 		err := n.mList.Leave(10 * time.Second)
 		if err != nil {
 			n.logger.Printf("Failed to leave from discovery: %q\n", err.Error())
@@ -240,15 +239,30 @@ func (n *Node) Stop() {
 			n.logger.Printf("Failed to shutdown discovery: %q\n", err.Error())
 		}
 		n.logger.Println("Discovery stopped")
-		err = n.Raft.Shutdown().Error()
+	}
+
+	if n.Raft != nil {
+		err := n.Raft.Shutdown().Error()
 		if err != nil {
 			n.logger.Printf("Failed to shutdown Raft: %q\n", err.Error())
 		}
 		n.logger.Println("Raft stopped")
+	}
+
+	if n.GrpcServer != nil {
 		n.GrpcServer.GracefulStop()
 		n.logger.Println("Raft Server stopped")
-		n.logger.Println("Node Stopped!")
-		n.stoppedCh <- true
+	}
+
+	n.logger.Println("Node Stopped!")
+
+	if n.stopCh != nil {
+		select {
+		case n.stopCh <- true:
+		default:
+		}
+		close(n.stopCh)
+		n.stopCh = nil
 	}
 }
 

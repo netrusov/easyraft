@@ -15,7 +15,7 @@ import (
 	"github.com/netrusov/easyraft/fsm"
 )
 
-func ListenAndServe(httpPort int, node *easyraft.Node, stopCh chan any) {
+func ListenAndServe(httpPort int, node *easyraft.Node) {
 	http.HandleFunc("/put", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -75,14 +75,9 @@ func ListenAndServe(httpPort int, node *easyraft.Node, stopCh chan any) {
 	}()
 
 	sigs := make(chan os.Signal, 1)
-	done := make(chan bool, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigs
-		done <- true
-	}()
 
-	<-done
+	<-sigs
+
 	server.Shutdown(context.Background())
-	<-stopCh
 }

@@ -33,11 +33,11 @@ func main() {
 		panic(err)
 	}
 
-	stopCh, err := node.Start()
+	_, err = node.Start()
 	if err != nil {
 		panic(err)
 	}
 	defer node.Stop()
 
-	server.ListenAndServe(httpPort, node, stopCh)
+	server.ListenAndServe(httpPort, node)
 }
