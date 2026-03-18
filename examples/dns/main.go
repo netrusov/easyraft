@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 	"os/signal"
 	"strconv"
@@ -12,8 +11,6 @@ import (
 	"github.com/netrusov/easyraft"
 	"github.com/netrusov/easyraft/discovery"
 	"github.com/netrusov/easyraft/examples/server"
-	"github.com/netrusov/easyraft/fsm"
-	"github.com/netrusov/easyraft/serializer"
 )
 
 func main() {
@@ -23,18 +20,14 @@ func main() {
 	dataDir := os.Getenv("DATA_DIR")
 	dnsName := os.Getenv("DNS_NAME")
 
-	log.Println(dataDir)
+	cfg := easyraft.DefaultConfig()
+	cfg.RaftPort = raftPort
+	cfg.DiscoveryPort = discoveryPort
+	cfg.DataDir = dataDir
+	cfg.DiscoveryMethod = discovery.NewDNSDiscovery(dnsName, raftPort)
+	cfg.ResolveAdvertiseAddr = "dummy"
 
-	node, err := easyraft.NewNode(
-		raftPort,
-		discoveryPort,
-		dataDir,
-		[]fsm.FSMService{fsm.NewInMemoryMapService()},
-		serializer.NewMsgPackSerializer(),
-		discovery.NewDNSDiscovery(dnsName, raftPort),
-		false,
-		"dummy",
-	)
+	node, err := easyraft.NewNode(cfg)
 	if err != nil {
 		panic(err)
 	}

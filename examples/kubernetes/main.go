@@ -11,8 +11,6 @@ import (
 	"github.com/netrusov/easyraft"
 	"github.com/netrusov/easyraft/discovery"
 	"github.com/netrusov/easyraft/examples/server"
-	"github.com/netrusov/easyraft/fsm"
-	"github.com/netrusov/easyraft/serializer"
 )
 
 func main() {
@@ -22,17 +20,13 @@ func main() {
 	httpPort, _ := strconv.Atoi(os.Getenv("HTTP_PORT"))
 	dataDir := os.Getenv("DATA_DIR")
 
-	// EasyRaft Node
-	node, err := easyraft.NewNode(
-		raftPort,
-		discoveryPort,
-		dataDir,
-		[]fsm.FSMService{fsm.NewInMemoryMapService()},
-		serializer.NewMsgPackSerializer(),
-		discovery.NewKubernetesDiscovery("", nil, ""),
-		false,
-		"",
-	)
+	cfg := easyraft.DefaultConfig()
+	cfg.RaftPort = raftPort
+	cfg.DiscoveryPort = discoveryPort
+	cfg.DataDir = dataDir
+	cfg.DiscoveryMethod = discovery.NewKubernetesDiscovery("", nil, "")
+
+	node, err := easyraft.NewNode(cfg)
 	if err != nil {
 		panic(err)
 	}

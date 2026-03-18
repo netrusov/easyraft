@@ -51,21 +51,50 @@ type Node struct {
 }
 
 const (
+	defaultRaftPort         = 5000
+	defaultDiscoveryPort    = 5001
+	defaultDataDir          = "erdb"
 	defaultRaftLogCacheSize = 512
 	defaultRaftLogLevel     = "Info"
 )
 
+type Config struct {
+	RaftPort             int
+	DiscoveryPort        int
+	DataDir              string
+	Services             []fsm.FSMService
+	Serializer           serializer.Serializer
+	DiscoveryMethod      discovery.DiscoveryMethod
+	SnapshotEnabled      bool
+	ResolveAdvertiseAddr string
+	Logger               *log.Logger
+}
+
+func DefaultConfig() *Config {
+	logger := log.Default()
+	logger.SetPrefix("[EasyRaft] ")
+
+	return &Config{
+		RaftPort:      defaultRaftPort,
+		DiscoveryPort: defaultDiscoveryPort,
+		DataDir:       defaultDataDir,
+		Services:      []fsm.FSMService{fsm.NewInMemoryMapService()},
+		Serializer:    serializer.NewMsgPackSerializer(),
+		Logger:        logger,
+	}
+}
+
 // NewNode returns an EasyRaft node
-func NewNode(raftPort, discoveryPort int, dataDir string, services []fsm.FSMService, serializer serializer.Serializer, discoveryMethod discovery.DiscoveryMethod, snapshotEnabled bool, resolveAdvertiseAddr string) (*Node, error) {
+func NewNode(cfg *Config) (*Node, error) {
 	advertiseAddr := "0.0.0.0"
 
 	// resolve which address will be used to announce to members
-	if resolveAdvertiseAddr != "" {
-		advertiseAddr = util.GetOutboundIP(resolveAdvertiseAddr).String()
+	if cfg.ResolveAdvertiseAddr != "" {
+		advertiseAddr = util.GetOutboundIP(cfg.ResolveAdvertiseAddr).String()
 	}
 
 	// default raft config
-	addr := net.JoinHostPort(advertiseAddr, strconv.Itoa(raftPort))
+	addr := net.JoinHostPort(advertiseAddr, strconv.Itoa(cfg.RaftPort))
 	nodeID := uid.New(50)
 
 	raftConf := raft.DefaultConfig()
@@ -74,13 +103,13 @@ func NewNode(raftPort, discoveryPort int, dataDir string, services []fsm.FSMServ
 	raftConf.LogLevel = defaultRaftLogLevel
 
 	// stable/log/snapshot store config
-	if !util.IsDir(dataDir) {
-		if err := util.RemoveCreateDir(dataDir); err != nil {
+	if !util.IsDir(cfg.DataDir) {
+		if err := util.RemoveCreateDir(cfg.DataDir); err != nil {
 			return nil, err
 		}
 	}
 
-	stableStoreFile := filepath.Join(dataDir, "store.boltdb")
+	stableStoreFile := filepath.Join(cfg.DataDir, "store.boltdb")
 	if util.FileExists(stableStoreFile) {
 		if err := os.Remove(stableStoreFile); err != nil {
 			return nil, err
@@ -98,7 +127,7 @@ func NewNode(raftPort, discoveryPort int, dataDir string, services []fsm.FSMServ
 	}
 
 	var snapshotStore raft.SnapshotStore
-	if !snapshotEnabled {
+	if !cfg.SnapshotEnabled {
 		snapshotStore = raft.NewDiscardSnapshotStore()
 	} else {
 		// TODO: implement: snapshotStore = NewLogsOnlySnapshotStore(serializer)
@@ -112,34 +141,31 @@ func NewNode(raftPort, discoveryPort int, dataDir string, services []fsm.FSMServ
 		},
 	)
 
-	sm := fsm.NewRoutingFSM(services)
-	sm.Init(serializer)
+	sm := fsm.NewRoutingFSM(cfg.Services)
+	sm.Init(cfg.Serializer)
 
 	memberlistConfig := memberlist.DefaultWANConfig()
-	memberlistConfig.BindPort = discoveryPort
-	memberlistConfig.Name = fmt.Sprintf("%s:%d", nodeID, raftPort)
+	memberlistConfig.BindPort = cfg.DiscoveryPort
+	memberlistConfig.Name = fmt.Sprintf("%s:%d", nodeID, cfg.RaftPort)
 
 	raftServer, err := raft.NewRaft(raftConf, sm, logStore, stableStore, snapshotStore, grpcTransport.Transport())
 	if err != nil {
 		return nil, err
 	}
 
-	logger := log.Default()
-	logger.SetPrefix("[EasyRaft] ")
-
 	node := &Node{
 		ID:               nodeID,
 		address:          addr,
-		dataDir:          dataDir,
+		dataDir:          cfg.DataDir,
 		Raft:             raftServer,
-		RaftPort:         raftPort,
+		RaftPort:         cfg.RaftPort,
 		TransportManager: grpcTransport,
-		Serializer:       serializer,
-		DiscoveryPort:    discoveryPort,
-		DiscoveryMethod:  discoveryMethod,
+		Serializer:       cfg.Serializer,
+		DiscoveryPort:    cfg.DiscoveryPort,
+		DiscoveryMethod:  cfg.DiscoveryMethod,
 		memberlistConfig: memberlistConfig,
-		logger:           logger,
-		snapshotEnabled:  snapshotEnabled,
+		logger:           cfg.Logger,
+		snapshotEnabled:  cfg.SnapshotEnabled,
 	}
 
 	return node, nil

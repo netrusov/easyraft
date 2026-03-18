@@ -56,16 +56,15 @@ func main() {
     raftPort := 5000
     discoveryPort := 5001
     dataDir := "s1"
-    node, err := easyraft.NewNode(
-        raftPort,
-        discoveryPort,
-        dataDir,
-        []fsm.FSMService{fsm.NewInMemoryMapService()},
-        serializer.NewMsgPackSerializer(),
-        discovery.NewMDNSDiscovery(),
-        false,
-        "",
-    )
+
+    node, err := easyraft.NewNode(easyraft.Config{
+        RaftPort:        raftPort,
+        DiscoveryPort:   discoveryPort,
+        DataDir:         dataDir,
+        Services:        []fsm.FSMService{fsm.NewInMemoryMapService()},
+        Serializer:      serializer.NewMsgPackSerializer(),
+        DiscoveryMethod: discovery.NewMDNSDiscovery(),
+    })
 
     if err != nil {
         panic(err)
