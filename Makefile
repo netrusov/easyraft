@@ -1,5 +1,5 @@
 grpc:
-	protoc --go_out=. --go-grpc_out=. proto/*.proto
+	protoc --go_out=./internal --go-grpc_out=./internal internal/proto/*.proto
 
 download:
 	go mod tidy

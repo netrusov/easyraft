@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        v7.34.0
-// source: proto/raft.proto
+// source: internal/proto/raft.proto
 
 package grpc
 
@@ -29,7 +29,7 @@ type GetDetailsRequest struct {
 
 func (x *GetDetailsRequest) Reset() {
 	*x = GetDetailsRequest{}
-	mi := &file_proto_raft_proto_msgTypes[0]
+	mi := &file_internal_proto_raft_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -41,7 +41,7 @@ func (x *GetDetailsRequest) String() string {
 func (*GetDetailsRequest) ProtoMessage() {}
 
 func (x *GetDetailsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_raft_proto_msgTypes[0]
+	mi := &file_internal_proto_raft_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -54,7 +54,7 @@ func (x *GetDetailsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDetailsRequest.ProtoReflect.Descriptor instead.
 func (*GetDetailsRequest) Descriptor() ([]byte, []int) {
-	return file_proto_raft_proto_rawDescGZIP(), []int{0}
+	return file_internal_proto_raft_proto_rawDescGZIP(), []int{0}
 }
 
 type GetDetailsResponse struct {
@@ -68,7 +68,7 @@ type GetDetailsResponse struct {
 
 func (x *GetDetailsResponse) Reset() {
 	*x = GetDetailsResponse{}
-	mi := &file_proto_raft_proto_msgTypes[1]
+	mi := &file_internal_proto_raft_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -80,7 +80,7 @@ func (x *GetDetailsResponse) String() string {
 func (*GetDetailsResponse) ProtoMessage() {}
 
 func (x *GetDetailsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_raft_proto_msgTypes[1]
+	mi := &file_internal_proto_raft_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -93,7 +93,7 @@ func (x *GetDetailsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDetailsResponse.ProtoReflect.Descriptor instead.
 func (*GetDetailsResponse) Descriptor() ([]byte, []int) {
-	return file_proto_raft_proto_rawDescGZIP(), []int{1}
+	return file_internal_proto_raft_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *GetDetailsResponse) GetServerID() string {
@@ -126,7 +126,7 @@ type ApplyRequest struct {
 
 func (x *ApplyRequest) Reset() {
 	*x = ApplyRequest{}
-	mi := &file_proto_raft_proto_msgTypes[2]
+	mi := &file_internal_proto_raft_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -138,7 +138,7 @@ func (x *ApplyRequest) String() string {
 func (*ApplyRequest) ProtoMessage() {}
 
 func (x *ApplyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_raft_proto_msgTypes[2]
+	mi := &file_internal_proto_raft_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -151,7 +151,7 @@ func (x *ApplyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyRequest.ProtoReflect.Descriptor instead.
 func (*ApplyRequest) Descriptor() ([]byte, []int) {
-	return file_proto_raft_proto_rawDescGZIP(), []int{2}
+	return file_internal_proto_raft_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ApplyRequest) GetRequest() []byte {
@@ -170,7 +170,7 @@ type ApplyResponse struct {
 
 func (x *ApplyResponse) Reset() {
 	*x = ApplyResponse{}
-	mi := &file_proto_raft_proto_msgTypes[3]
+	mi := &file_internal_proto_raft_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -182,7 +182,7 @@ func (x *ApplyResponse) String() string {
 func (*ApplyResponse) ProtoMessage() {}
 
 func (x *ApplyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_raft_proto_msgTypes[3]
+	mi := &file_internal_proto_raft_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -195,7 +195,7 @@ func (x *ApplyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyResponse.ProtoReflect.Descriptor instead.
 func (*ApplyResponse) Descriptor() ([]byte, []int) {
-	return file_proto_raft_proto_rawDescGZIP(), []int{3}
+	return file_internal_proto_raft_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ApplyResponse) GetResponse() []byte {
@@ -205,11 +205,11 @@ func (x *ApplyResponse) GetResponse() []byte {
 	return nil
 }
 
-var File_proto_raft_proto protoreflect.FileDescriptor
+var File_internal_proto_raft_proto protoreflect.FileDescriptor
 
-const file_proto_raft_proto_rawDesc = "" +
+const file_internal_proto_raft_proto_rawDesc = "" +
 	"\n" +
-	"\x10proto/raft.proto\"\x13\n" +
+	"\x19internal/proto/raft.proto\"\x13\n" +
 	"\x11GetDetailsRequest\"\x82\x01\n" +
 	"\x12GetDetailsResponse\x12\x1a\n" +
 	"\bserverID\x18\x01 \x01(\tR\bserverID\x12$\n" +
@@ -225,25 +225,25 @@ const file_proto_raft_proto_rawDesc = "" +
 	"GetDetails\x12\x12.GetDetailsRequest\x1a\x13.GetDetailsResponse\"\x00B\bZ\x06./grpcb\x06proto3"
 
 var (
-	file_proto_raft_proto_rawDescOnce sync.Once
-	file_proto_raft_proto_rawDescData []byte
+	file_internal_proto_raft_proto_rawDescOnce sync.Once
+	file_internal_proto_raft_proto_rawDescData []byte
 )
 
-func file_proto_raft_proto_rawDescGZIP() []byte {
-	file_proto_raft_proto_rawDescOnce.Do(func() {
-		file_proto_raft_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_proto_raft_proto_rawDesc), len(file_proto_raft_proto_rawDesc)))
+func file_internal_proto_raft_proto_rawDescGZIP() []byte {
+	file_internal_proto_raft_proto_rawDescOnce.Do(func() {
+		file_internal_proto_raft_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_internal_proto_raft_proto_rawDesc), len(file_internal_proto_raft_proto_rawDesc)))
 	})
-	return file_proto_raft_proto_rawDescData
+	return file_internal_proto_raft_proto_rawDescData
 }
 
-var file_proto_raft_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
-var file_proto_raft_proto_goTypes = []any{
+var file_internal_proto_raft_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_internal_proto_raft_proto_goTypes = []any{
 	(*GetDetailsRequest)(nil),  // 0: GetDetailsRequest
 	(*GetDetailsResponse)(nil), // 1: GetDetailsResponse
 	(*ApplyRequest)(nil),       // 2: ApplyRequest
 	(*ApplyResponse)(nil),      // 3: ApplyResponse
 }
-var file_proto_raft_proto_depIdxs = []int32{
+var file_internal_proto_raft_proto_depIdxs = []int32{
 	2, // 0: Raft.ApplyLog:input_type -> ApplyRequest
 	0, // 1: Raft.GetDetails:input_type -> GetDetailsRequest
 	3, // 2: Raft.ApplyLog:output_type -> ApplyResponse
@@ -255,26 +255,26 @@ var file_proto_raft_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for field type_name
 }
 
-func init() { file_proto_raft_proto_init() }
-func file_proto_raft_proto_init() {
-	if File_proto_raft_proto != nil {
+func init() { file_internal_proto_raft_proto_init() }
+func file_internal_proto_raft_proto_init() {
+	if File_internal_proto_raft_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_raft_proto_rawDesc), len(file_proto_raft_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_proto_raft_proto_rawDesc), len(file_internal_proto_raft_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_proto_raft_proto_goTypes,
-		DependencyIndexes: file_proto_raft_proto_depIdxs,
-		MessageInfos:      file_proto_raft_proto_msgTypes,
+		GoTypes:           file_internal_proto_raft_proto_goTypes,
+		DependencyIndexes: file_internal_proto_raft_proto_depIdxs,
+		MessageInfos:      file_internal_proto_raft_proto_msgTypes,
 	}.Build()
-	File_proto_raft_proto = out.File
-	file_proto_raft_proto_goTypes = nil
-	file_proto_raft_proto_depIdxs = nil
+	File_internal_proto_raft_proto = out.File
+	file_internal_proto_raft_proto_goTypes = nil
+	file_internal_proto_raft_proto_depIdxs = nil
 }
