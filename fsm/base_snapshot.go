@@ -1,8 +1,9 @@
 package fsm
 
 import (
-	"github.com/hashicorp/raft"
 	"sync"
+
+	"github.com/hashicorp/raft"
 )
 
 type BaseFSMSnapshot struct {
@@ -20,6 +21,7 @@ func (i *BaseFSMSnapshot) Persist(sink raft.SnapshotSink) error {
 	if err != nil {
 		return err
 	}
+
 	_, err = sink.Write(snapshotData)
 	return err
 }

@@ -2,6 +2,7 @@ package fsm
 
 import (
 	"github.com/hashicorp/raft"
+
 	"github.com/netrusov/easyraft/serializer"
 )
 

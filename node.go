@@ -18,13 +18,15 @@ import (
 	"github.com/hashicorp/memberlist"
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
+	"github.com/zemirco/uid"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
 	"github.com/netrusov/easyraft/discovery"
 	"github.com/netrusov/easyraft/fsm"
-	"github.com/netrusov/easyraft/grpc"
+	ergrpc "github.com/netrusov/easyraft/grpc"
 	"github.com/netrusov/easyraft/serializer"
 	"github.com/netrusov/easyraft/util"
-	"github.com/zemirco/uid"
-	ggrpc "google.golang.org/grpc"
 )
 
 type Node struct {
@@ -34,7 +36,7 @@ type Node struct {
 	address          string
 	dataDir          string
 	Raft             *raft.Raft
-	GrpcServer       *ggrpc.Server
+	GrpcServer       *grpc.Server
 	DiscoveryMethod  discovery.DiscoveryMethod
 	TransportManager *transport.Manager
 	Serializer       serializer.Serializer
@@ -96,7 +98,12 @@ func NewNode(raftPort, discoveryPort int, dataDir string, services []fsm.FSMServ
 	}
 
 	// grpc transport
-	grpcTransport := transport.New(raft.ServerAddress(addr), []ggrpc.DialOption{ggrpc.WithInsecure()})
+	grpcTransport := transport.New(
+		raft.ServerAddress(addr),
+		[]grpc.DialOption{
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+		},
+	)
 
 	// init FSM
 	sm := fsm.NewRoutingFSM(services)
@@ -173,7 +180,7 @@ func (n *Node) Start() (chan any, error) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	grpcServer := ggrpc.NewServer()
+	grpcServer := grpc.NewServer()
 	n.GrpcServer = grpcServer
 
 	// register management services
@@ -181,7 +188,7 @@ func (n *Node) Start() (chan any, error) {
 
 	// register client services
 	clientGrpcServer := NewClientGrpcService(n)
-	grpc.RegisterRaftServer(grpcServer, clientGrpcServer)
+	ergrpc.RegisterRaftServer(grpcServer, clientGrpcServer)
 
 	// discovery method
 	discoveryChan, err := n.DiscoveryMethod.Start(n.ID, n.RaftPort)

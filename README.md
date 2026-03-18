@@ -41,10 +41,10 @@ is the only one built-in at the moment)
 
 ```go
 import (
-"github.com/netrusov/easyraft"
-"github.com/netrusov/easyraft/discovery"
-"github.com/netrusov/easyraft/fsm"
-"github.com/netrusov/easyraft/serializer"
+  "github.com/netrusov/easyraft"
+  "github.com/netrusov/easyraft/discovery"
+  "github.com/netrusov/easyraft/fsm"
+  "github.com/netrusov/easyraft/serializer"
 )
 
 func main() {

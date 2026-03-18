@@ -3,15 +3,16 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"log"
+	"math/rand"
+	"strings"
+	"time"
+
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"log"
-	"math/rand"
-	"strings"
-	"time"
 )
 
 const (
@@ -32,11 +33,14 @@ func NewKubernetesDiscovery(namespace string, serviceLabels map[string]string, r
 	if raftPortName == "" {
 		raftPortName = defaultK8sDiscoveryNodePortName
 	}
+
 	if serviceLabels == nil || len(serviceLabels) == 0 {
 		serviceLabels = make(map[string]string)
 		serviceLabels["svcType"] = defaultK8sDiscoverySvcType
 	}
+
 	delayTime := time.Duration(rand.Intn(5)+1) * time.Second
+
 	return &KubernetesDiscovery{
 		namespace:             namespace,
 		matchingServiceLabels: serviceLabels,
@@ -52,11 +56,14 @@ func (k *KubernetesDiscovery) Start(_ string, _ int) (chan string, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	clientSet, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, err
 	}
+
 	go k.discovery(clientSet)
+
 	return k.discoveryChan, nil
 }
 

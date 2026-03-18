@@ -4,11 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"strings"
 
 	"github.com/hashicorp/raft"
+
 	"github.com/netrusov/easyraft/serializer"
 )
 
@@ -24,6 +24,7 @@ func NewRoutingFSM(services []FSMService) FSM {
 	for _, service := range services {
 		servicesMap[service.Name()] = service
 	}
+
 	return &RoutingFSM{
 		services:            servicesMap,
 		reqDataTypes:        []any{},
@@ -53,9 +54,10 @@ func (i *RoutingFSM) Apply(log *raft.Log) any {
 
 		// check request type
 		var fields []string
-		for k, _ := range payloadMap {
+		for k := range payloadMap {
 			fields = append(fields, k)
 		}
+
 		// routing request to service
 		foundType, err := getTargetType(i.reqDataTypes, fields)
 		if err == nil {
@@ -76,14 +78,16 @@ func (i *RoutingFSM) Snapshot() (raft.FSMSnapshot, error) {
 }
 
 func (i *RoutingFSM) Restore(closer io.ReadCloser) error {
-	snapData, err := ioutil.ReadAll(closer)
+	snapData, err := io.ReadAll(closer)
 	if err != nil {
 		return err
 	}
+
 	servicesData, err := i.ser.Deserialize(snapData)
 	if err != nil {
 		return err
 	}
+
 	s := servicesData.(map[string]any)
 	for key, service := range i.services {
 		err = service.ApplySnapshot(s[key])
@@ -91,5 +95,6 @@ func (i *RoutingFSM) Restore(closer io.ReadCloser) error {
 			log.Printf("Failed to apply snapshot to %q service!\n", key)
 		}
 	}
+
 	return nil
 }

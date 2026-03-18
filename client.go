@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/netrusov/easyraft/grpc"
-	ggrpc "google.golang.org/grpc"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
+	ergrpc "github.com/netrusov/easyraft/grpc"
 )
 
 func ApplyOnLeader(node *Node, payload []byte) (any, error) {
@@ -13,15 +15,19 @@ func ApplyOnLeader(node *Node, payload []byte) (any, error) {
 		return nil, errors.New("unknown leader")
 	}
 
-	var opt ggrpc.DialOption = ggrpc.EmptyDialOption{}
-	conn, err := ggrpc.Dial(string(node.Raft.Leader()), ggrpc.WithInsecure(), ggrpc.WithBlock(), opt)
+	conn, err := grpc.NewClient(
+		string(node.Raft.Leader()),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.EmptyDialOption{},
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Close()
-	client := grpc.NewRaftClient(conn)
 
-	response, err := client.ApplyLog(context.Background(), &grpc.ApplyRequest{Request: payload})
+	client := ergrpc.NewRaftClient(conn)
+
+	response, err := client.ApplyLog(context.Background(), &ergrpc.ApplyRequest{Request: payload})
 	if err != nil {
 		return nil, err
 	}
@@ -34,16 +40,20 @@ func ApplyOnLeader(node *Node, payload []byte) (any, error) {
 	return result, nil
 }
 
-func GetPeerDetails(address string) (*grpc.GetDetailsResponse, error) {
-	var opt ggrpc.DialOption = ggrpc.EmptyDialOption{}
-	conn, err := ggrpc.Dial(address, ggrpc.WithInsecure(), ggrpc.WithBlock(), opt)
+func GetPeerDetails(address string) (*ergrpc.GetDetailsResponse, error) {
+	conn, err := grpc.NewClient(
+		address,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.EmptyDialOption{},
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer conn.Close()
-	client := grpc.NewRaftClient(conn)
 
-	response, err := client.GetDetails(context.Background(), &grpc.GetDetailsRequest{})
+	client := ergrpc.NewRaftClient(conn)
+
+	response, err := client.GetDetails(context.Background(), &ergrpc.GetDetailsRequest{})
 	if err != nil {
 		return nil, err
 	}

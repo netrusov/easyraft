@@ -3,7 +3,7 @@ package easyraft
 import (
 	"context"
 
-	rgrpc "github.com/netrusov/easyraft/grpc"
+	ergrpc "github.com/netrusov/easyraft/grpc"
 )
 
 func NewClientGrpcService(node *Node) *ClientGrpcServices {
@@ -14,23 +14,25 @@ func NewClientGrpcService(node *Node) *ClientGrpcServices {
 
 type ClientGrpcServices struct {
 	Node *Node
-	rgrpc.UnimplementedRaftServer
+	ergrpc.UnimplementedRaftServer
 }
 
-func (s *ClientGrpcServices) ApplyLog(ctx context.Context, request *rgrpc.ApplyRequest) (*rgrpc.ApplyResponse, error) {
+func (s *ClientGrpcServices) ApplyLog(ctx context.Context, request *ergrpc.ApplyRequest) (*ergrpc.ApplyResponse, error) {
 	result := s.Node.Raft.Apply(request.GetRequest(), 0)
 	if result.Error() != nil {
 		return nil, result.Error()
 	}
+
 	respPayload, err := s.Node.Serializer.Serialize(result.Response())
 	if err != nil {
 		return nil, err
 	}
-	return &rgrpc.ApplyResponse{Response: respPayload}, nil
+
+	return &ergrpc.ApplyResponse{Response: respPayload}, nil
 }
 
-func (s *ClientGrpcServices) GetDetails(context.Context, *rgrpc.GetDetailsRequest) (*rgrpc.GetDetailsResponse, error) {
-	return &rgrpc.GetDetailsResponse{
+func (s *ClientGrpcServices) GetDetails(context.Context, *ergrpc.GetDetailsRequest) (*ergrpc.GetDetailsResponse, error) {
+	return &ergrpc.GetDetailsResponse{
 		ServerId:      s.Node.ID,
 		DiscoveryPort: int32(s.Node.DiscoveryPort),
 	}, nil
