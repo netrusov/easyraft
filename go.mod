@@ -9,7 +9,7 @@ require (
 	github.com/hashicorp/raft v1.7.3
 	github.com/hashicorp/raft-boltdb v0.0.0-20251103221153-05f9dd7a5148
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/vmihailenco/msgpack/v5 v5.3.5
+	github.com/vmihailenco/msgpack/v5 v5.4.1
 	github.com/zemirco/uid v0.0.0-20160129141151-3763f3c45832
 	google.golang.org/grpc v1.56.3
 	google.golang.org/protobuf v1.33.0
