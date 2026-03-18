@@ -11,8 +11,9 @@ message GetDetailsRequest {
 }
 
 message GetDetailsResponse {
-    string serverId = 1;
+    string serverID = 1;
     int32 discoveryPort = 2;
+    bool hasExistingState = 3;
 }
 
 message ApplyRequest {

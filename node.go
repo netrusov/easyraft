@@ -44,6 +44,9 @@ type Node struct {
 	memberlistConfig *memberlist.Config
 	logger           *log.Logger
 	snapshotEnabled  bool
+	hasExistingState bool
+	bootstrap        bool
+	formationTimeout time.Duration
 
 	mu       sync.Mutex
 	started  bool
@@ -51,14 +54,18 @@ type Node struct {
 }
 
 const (
+	nodeIDFileName = "node.id"
+
 	defaultRaftPort         = 5000
 	defaultDiscoveryPort    = 5001
 	defaultDataDir          = "erdb"
 	defaultRaftLogCacheSize = 512
 	defaultRaftLogLevel     = "Info"
+	defaultFormationTimeout = 5 * time.Second
 )
 
 type Config struct {
+	NodeID               string
 	RaftPort             int
 	DiscoveryPort        int
 	DataDir              string
@@ -66,6 +73,8 @@ type Config struct {
 	Serializer           serializer.Serializer
 	DiscoveryMethod      discovery.DiscoveryMethod
 	SnapshotEnabled      bool
+	Bootstrap            bool
+	FormationTimeout     time.Duration
 	ResolveAdvertiseAddr string
 	Logger               *log.Logger
 }
@@ -75,17 +84,37 @@ func DefaultConfig() *Config {
 	logger.SetPrefix("[EasyRaft] ")
 
 	return &Config{
-		RaftPort:      defaultRaftPort,
-		DiscoveryPort: defaultDiscoveryPort,
-		DataDir:       defaultDataDir,
-		Services:      []fsm.FSMService{fsm.NewInMemoryMapService()},
-		Serializer:    serializer.NewMsgPackSerializer(),
-		Logger:        logger,
+		RaftPort:         defaultRaftPort,
+		DiscoveryPort:    defaultDiscoveryPort,
+		DataDir:          defaultDataDir,
+		Services:         []fsm.FSMService{fsm.NewInMemoryMapService()},
+		Serializer:       serializer.NewMsgPackSerializer(),
+		Logger:           logger,
+		Bootstrap:        false,
+		FormationTimeout: defaultFormationTimeout,
 	}
+}
+
+func ValidateConfig(cfg *Config) error {
+	if cfg == nil {
+		return errors.New("config is required")
+	}
+	if cfg.Serializer == nil {
+		return errors.New("serializer is required")
+	}
+	if cfg.DiscoveryMethod == nil {
+		return errors.New("discovery method is required")
+	}
+
+	return nil
 }
 
 // NewNode returns an EasyRaft node
 func NewNode(cfg *Config) (*Node, error) {
+	if err := ValidateConfig(cfg); err != nil {
+		return nil, err
+	}
+
 	advertiseAddr := "0.0.0.0"
 
 	// resolve which address will be used to announce to members
@@ -95,7 +124,14 @@ func NewNode(cfg *Config) (*Node, error) {
 
 	// default raft config
 	addr := net.JoinHostPort(advertiseAddr, strconv.Itoa(cfg.RaftPort))
-	nodeID := uid.New(50)
+	if err := os.MkdirAll(cfg.DataDir, os.ModePerm); err != nil {
+		return nil, err
+	}
+
+	nodeID, err := resolveNodeID(cfg)
+	if err != nil {
+		return nil, err
+	}
 
 	raftConf := raft.DefaultConfig()
 	raftConf.LocalID = raft.ServerID(nodeID)
@@ -103,18 +139,7 @@ func NewNode(cfg *Config) (*Node, error) {
 	raftConf.LogLevel = defaultRaftLogLevel
 
 	// stable/log/snapshot store config
-	if !util.IsDir(cfg.DataDir) {
-		if err := util.RemoveCreateDir(cfg.DataDir); err != nil {
-			return nil, err
-		}
-	}
-
 	stableStoreFile := filepath.Join(cfg.DataDir, "store.boltdb")
-	if util.FileExists(stableStoreFile) {
-		if err := os.Remove(stableStoreFile); err != nil {
-			return nil, err
-		}
-	}
 
 	stableStore, err := raftboltdb.NewBoltStore(stableStoreFile)
 	if err != nil {
@@ -148,6 +173,11 @@ func NewNode(cfg *Config) (*Node, error) {
 	memberlistConfig.BindPort = cfg.DiscoveryPort
 	memberlistConfig.Name = fmt.Sprintf("%s:%d", nodeID, cfg.RaftPort)
 
+	hasExistingState, err := raft.HasExistingState(logStore, stableStore, snapshotStore)
+	if err != nil {
+		return nil, err
+	}
+
 	raftServer, err := raft.NewRaft(raftConf, sm, logStore, stableStore, snapshotStore, grpcTransport.Transport())
 	if err != nil {
 		return nil, err
@@ -166,6 +196,9 @@ func NewNode(cfg *Config) (*Node, error) {
 		memberlistConfig: memberlistConfig,
 		logger:           cfg.Logger,
 		snapshotEnabled:  cfg.SnapshotEnabled,
+		hasExistingState: hasExistingState,
+		bootstrap:        cfg.Bootstrap,
+		formationTimeout: cfg.FormationTimeout,
 	}
 
 	return node, nil
@@ -187,32 +220,8 @@ func (n *Node) Start(ctx context.Context) error {
 
 	n.logger.Println("Starting Node...")
 
-	configuration := raft.Configuration{
-		Servers: []raft.Server{
-			{
-				ID:      raft.ServerID(n.ID),
-				Address: n.TransportManager.Transport().LocalAddr(),
-			},
-		},
-	}
-
-	if err := n.Raft.BootstrapCluster(configuration).Error(); err != nil {
-		n.markStopped()
-		return err
-	}
-
-	n.memberlistConfig.Events = n
-	list, err := memberlist.Create(n.memberlistConfig)
-	if err != nil {
-		n.markStopped()
-		return err
-	}
-	n.memberlist = list
-
 	grpcListen, err := net.Listen("tcp", n.address)
 	if err != nil {
-		_ = list.Shutdown()
-		n.memberlist = nil
 		n.markStopped()
 		return err
 	}
@@ -225,17 +234,6 @@ func (n *Node) Start(ctx context.Context) error {
 	clientGrpcServer := NewClientGrpcService(n)
 	ergrpc.RegisterRaftServer(grpcServer, clientGrpcServer)
 
-	discoveryChan, err := n.DiscoveryMethod.Start(n.ID, n.RaftPort)
-	if err != nil {
-		_ = grpcListen.Close()
-		_ = list.Shutdown()
-		n.memberlist = nil
-		n.GrpcServer = nil
-		n.markStopped()
-		return err
-	}
-	go n.handleDiscoveredNodes(discoveryChan)
-
 	go func() {
 		if err := grpcServer.Serve(grpcListen); err != nil {
 			if !n.stopping.Load() {
@@ -244,6 +242,63 @@ func (n *Node) Start(ctx context.Context) error {
 		}
 	}()
 
+	discoveryChan, err := n.DiscoveryMethod.Start(n.ID, n.RaftPort)
+	if err != nil {
+		grpcServer.Stop()
+		n.GrpcServer = nil
+		n.markStopped()
+		return err
+	}
+
+	bufferedPeers := make([]string, 0)
+	shouldBootstrap := false
+	if !n.hasExistingState {
+		shouldBootstrap = n.bootstrap
+		if !shouldBootstrap {
+			bufferedPeers, shouldBootstrap, err = n.evaluateBootstrap(ctx, discoveryChan)
+			if err != nil {
+				_ = n.DiscoveryMethod.Stop()
+				grpcServer.Stop()
+				n.GrpcServer = nil
+				n.markStopped()
+				return err
+			}
+		}
+	}
+
+	if shouldBootstrap {
+		configuration := raft.Configuration{
+			Servers: []raft.Server{
+				{
+					ID:      raft.ServerID(n.ID),
+					Address: n.TransportManager.Transport().LocalAddr(),
+				},
+			},
+		}
+
+		if err := n.Raft.BootstrapCluster(configuration).Error(); err != nil {
+			_ = n.DiscoveryMethod.Stop()
+			grpcServer.Stop()
+			n.GrpcServer = nil
+			n.markStopped()
+			return err
+		}
+	}
+
+	n.memberlistConfig.Events = n
+	list, err := memberlist.Create(n.memberlistConfig)
+	if err != nil {
+		_ = n.DiscoveryMethod.Stop()
+		grpcServer.Stop()
+		n.GrpcServer = nil
+		n.markStopped()
+		return err
+	}
+	n.memberlist = list
+
+	go n.handleDiscoveredNodes(n.replayDiscoveredPeers(bufferedPeers, discoveryChan))
+
+	n.hasExistingState = true
 	n.logger.Printf("Node started on port %d and discovery port %d\n", n.RaftPort, n.DiscoveryPort)
 	return nil
 }
@@ -345,6 +400,126 @@ func (n *Node) markStopped() {
 	n.mu.Unlock()
 }
 
+func (n *Node) evaluateBootstrap(ctx context.Context, discoveryChan <-chan string) ([]string, bool, error) {
+	timer := time.NewTimer(n.formationTimeout)
+	defer timer.Stop()
+
+	knownPeers := make([]string, 0)
+	seenPeers := make(map[string]struct{})
+	smallestNodeID := n.ID
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, false, ctx.Err()
+		case <-timer.C:
+			return knownPeers, n.ID == smallestNodeID, nil
+		case peer, ok := <-discoveryChan:
+			if !ok {
+				return knownPeers, n.ID == smallestNodeID, nil
+			}
+			if _, ok := seenPeers[peer]; ok {
+				continue
+			}
+
+			seenPeers[peer] = struct{}{}
+			knownPeers = append(knownPeers, peer)
+
+			peerDetails, err := GetPeerDetails(peer)
+			if err != nil {
+				continue
+			}
+			if peerDetails.ServerID == n.ID {
+				continue
+			}
+			if peerDetails.HasExistingState {
+				return knownPeers, false, nil
+			}
+			if peerDetails.ServerID != "" && peerDetails.ServerID < smallestNodeID {
+				smallestNodeID = peerDetails.ServerID
+			}
+		}
+	}
+}
+
+func (n *Node) replayDiscoveredPeers(bufferedPeers []string, discoveryChan <-chan string) <-chan string {
+	if len(bufferedPeers) == 0 {
+		return discoveryChan
+	}
+
+	out := make(chan string)
+	go func() {
+		defer close(out)
+
+		seenPeers := make(map[string]struct{}, len(bufferedPeers))
+		for _, peer := range bufferedPeers {
+			if _, ok := seenPeers[peer]; ok {
+				continue
+			}
+			seenPeers[peer] = struct{}{}
+			out <- peer
+		}
+
+		for peer := range discoveryChan {
+			if _, ok := seenPeers[peer]; ok {
+				continue
+			}
+			seenPeers[peer] = struct{}{}
+			out <- peer
+		}
+	}()
+
+	return out
+}
+
+func resolveNodeID(cfg *Config) (string, error) {
+	if cfg.NodeID != "" {
+		return cfg.NodeID, persistNodeID(cfg.DataDir, cfg.NodeID)
+	}
+
+	nodeIDPath := filepath.Join(cfg.DataDir, nodeIDFileName)
+	if util.FileExists(nodeIDPath) {
+		payload, err := os.ReadFile(nodeIDPath)
+		if err != nil {
+			return "", err
+		}
+
+		nodeID := strings.TrimSpace(string(payload))
+		if nodeID == "" {
+			return "", errors.New("persisted node ID is empty")
+		}
+		return nodeID, nil
+	}
+
+	nodeID := uid.New(20)
+	if err := persistNodeID(cfg.DataDir, nodeID); err != nil {
+		return "", err
+	}
+
+	return nodeID, nil
+}
+
+func persistNodeID(dataDir, nodeID string) error {
+	nodeIDPath := filepath.Join(dataDir, nodeIDFileName)
+	if util.FileExists(nodeIDPath) {
+		payload, err := os.ReadFile(nodeIDPath)
+		if err != nil {
+			return err
+		}
+
+		existingNodeID := strings.TrimSpace(string(payload))
+		if existingNodeID != "" && existingNodeID != nodeID {
+			return fmt.Errorf("persisted node ID %q does not match configured node ID %q", existingNodeID, nodeID)
+		}
+
+		if existingNodeID == nodeID {
+			return nil
+		}
+	}
+
+	return os.WriteFile(nodeIDPath, []byte(nodeID), 0o600)
+}
+
 func runWithContext(ctx context.Context, fn func() error) error {
 	resultCh := make(chan error, 1)
 	go func() {
@@ -379,12 +554,12 @@ func gracefulStopGRPC(ctx context.Context, server *grpc.Server) error {
 // handleDiscoveredNodes handles the discovered Node additions
 func (n *Node) handleDiscoveredNodes(discoveryChan <-chan string) {
 	for peer := range discoveryChan {
-		detailsResp, err := GetPeerDetails(peer)
+		details, err := GetPeerDetails(peer)
 		if err != nil {
 			continue
 		}
 
-		serverID := detailsResp.ServerId
+		serverID := details.ServerID
 		needToAddNode := true
 		for _, server := range n.Raft.GetConfiguration().Configuration().Servers {
 			if server.ID == raft.ServerID(serverID) || string(server.Address) == peer {
@@ -395,7 +570,7 @@ func (n *Node) handleDiscoveredNodes(discoveryChan <-chan string) {
 
 		if needToAddNode && n.memberlist != nil {
 			peerHost := strings.Split(peer, ":")[0]
-			peerDiscoveryAddr := fmt.Sprintf("%s:%d", peerHost, detailsResp.DiscoveryPort)
+			peerDiscoveryAddr := fmt.Sprintf("%s:%d", peerHost, details.DiscoveryPort)
 			if _, err = n.memberlist.Join([]string{peerDiscoveryAddr}); err != nil {
 				log.Printf("failed to join to cluster using discovery address: %s\n", peerDiscoveryAddr)
 			}

@@ -78,7 +78,7 @@ func (d *DNSDiscovery) Stop() error {
 }
 
 func (d *DNSDiscovery) SupportsNodeAutoRemoval() bool {
-	return false
+	return true
 }
 
 func (d *DNSDiscovery) discovery(out chan string, done <-chan struct{}) {

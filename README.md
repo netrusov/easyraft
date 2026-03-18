@@ -76,11 +76,14 @@ func main() {
     if err != nil {
         panic(err)
     }
+
     shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
     defer cancel()
     defer node.Stop(shutdownCtx)
 }
 ```
+
+On a fresh deployment, the cluster bootstraps automatically. Restarted nodes should reuse the same `DataDir`, which preserves both Raft state and the generated node ID.
 
 ## Examples
 
@@ -88,7 +91,9 @@ Examples can be found in the [examples](https://github.com/netrusov/easyraft/tre
 
 ## Build
 
-To regenerate gRPC code and install dependencies simply run `make install`
+To regenerate gRPC code and install dependencies simply run `make install`.
+
+Contributor notes for protobuf and generated gRPC files are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## TODO
 

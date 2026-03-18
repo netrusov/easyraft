@@ -1,2 +1,5 @@
 [tools]
-go = "1.26.0"
+go = "1.26.1"
+protoc = "latest"
+protoc-gen-go = "latest"
+protoc-gen-go-grpc = "latest"

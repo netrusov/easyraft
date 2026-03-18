@@ -31,9 +31,10 @@ func (s *ClientGrpcServices) ApplyLog(ctx context.Context, request *ergrpc.Apply
 	return &ergrpc.ApplyResponse{Response: respPayload}, nil
 }
 
-func (s *ClientGrpcServices) GetDetails(context.Context, *ergrpc.GetDetailsRequest) (*ergrpc.GetDetailsResponse, error) {
+func (s *ClientGrpcServices) GetDetails(ctx context.Context, _ *ergrpc.GetDetailsRequest) (*ergrpc.GetDetailsResponse, error) {
 	return &ergrpc.GetDetailsResponse{
-		ServerId:      s.Node.ID,
-		DiscoveryPort: int32(s.Node.DiscoveryPort),
+		ServerID:         s.Node.ID,
+		DiscoveryPort:    int32(s.Node.DiscoveryPort),
+		HasExistingState: s.Node.hasExistingState,
 	}, nil
 }
