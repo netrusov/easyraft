@@ -1,9 +1,13 @@
 package discovery
 
-import "sync"
+import (
+	"log"
+	"sync"
+)
 
 type StaticDiscovery struct {
-	Peers []string
+	Peers  []string
+	logger *log.Logger
 
 	mu          sync.Mutex
 	discoveryCh chan string
@@ -20,6 +24,10 @@ func NewStaticDiscovery(peers []string) DiscoveryMethod {
 
 func (d *StaticDiscovery) SupportsNodeAutoRemoval() bool {
 	return false
+}
+
+func (d *StaticDiscovery) SetLogger(logger *log.Logger) {
+	d.logger = logger
 }
 
 func (d *StaticDiscovery) Start(_ string, _ int) (<-chan string, error) {

@@ -15,6 +15,7 @@ import (
 type RoutingFSM struct {
 	services            map[string]FSMService
 	ser                 serializer.Serializer
+	logger              *log.Logger
 	reqDataTypes        []any
 	reqServiceDataTypes map[string]FSMService
 }
@@ -32,8 +33,13 @@ func NewRoutingFSM(services []FSMService) FSM {
 	}
 }
 
-func (i *RoutingFSM) Init(ser serializer.Serializer) {
+func (i *RoutingFSM) Init(ser serializer.Serializer, logger *log.Logger) {
 	i.ser = ser
+	if logger == nil {
+		logger = log.Default()
+	}
+	i.logger = logger
+
 	for _, service := range i.services {
 		i.reqDataTypes = append(i.reqDataTypes, service.GetReqDataTypes()...)
 		for _, dt := range service.GetReqDataTypes() {
@@ -92,7 +98,7 @@ func (i *RoutingFSM) Restore(closer io.ReadCloser) error {
 	for key, service := range i.services {
 		err = service.ApplySnapshot(s[key])
 		if err != nil {
-			log.Printf("Failed to apply snapshot to %q service!\n", key)
+			i.logger.Printf("Failed to apply snapshot to %q service!\n", key)
 		}
 	}
 

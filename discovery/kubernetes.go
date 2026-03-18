@@ -26,6 +26,7 @@ type KubernetesDiscovery struct {
 	matchingServiceLabels map[string]string
 	nodePortName          string
 	delayTime             time.Duration
+	logger                *log.Logger
 
 	mu          sync.Mutex
 	discoveryCh chan string
@@ -53,7 +54,11 @@ func NewKubernetesDiscovery(namespace string, serviceLabels map[string]string, r
 	}
 }
 
-func (k *KubernetesDiscovery) Start(_ string, _ int) (<-chan string, error) {
+func (d *KubernetesDiscovery) Start(_ string, _ int) (<-chan string, error) {
+	if d.logger == nil {
+		d.logger = log.Default()
+	}
+
 	config, err := rest.InClusterConfig()
 	if err != nil {
 		return nil, err
@@ -67,23 +72,23 @@ func (k *KubernetesDiscovery) Start(_ string, _ int) (<-chan string, error) {
 	out := make(chan string)
 	done := make(chan struct{})
 
-	k.mu.Lock()
-	k.discoveryCh = out
-	k.done = done
-	k.stopOnce = sync.Once{}
-	k.mu.Unlock()
+	d.mu.Lock()
+	d.discoveryCh = out
+	d.done = done
+	d.stopOnce = sync.Once{}
+	d.mu.Unlock()
 
-	k.wg.Add(1)
-	go k.discovery(clientSet, out, done)
+	d.wg.Add(1)
+	go d.discovery(clientSet, out, done)
 
 	return out, nil
 }
 
-func (k *KubernetesDiscovery) discovery(clientSet *kubernetes.Clientset, out chan string, done <-chan struct{}) {
-	defer k.wg.Done()
+func (d *KubernetesDiscovery) discovery(clientSet *kubernetes.Clientset, out chan string, done <-chan struct{}) {
+	defer d.wg.Done()
 	defer close(out)
 
-	ticker := time.NewTicker(k.delayTime)
+	ticker := time.NewTicker(d.delayTime)
 	defer ticker.Stop()
 
 	for {
@@ -93,12 +98,12 @@ func (k *KubernetesDiscovery) discovery(clientSet *kubernetes.Clientset, out cha
 		default:
 		}
 
-		services, err := clientSet.CoreV1().Services(k.namespace).List(context.Background(), metav1.ListOptions{
-			LabelSelector: labels.SelectorFromSet(k.matchingServiceLabels).String(),
+		services, err := clientSet.CoreV1().Services(d.namespace).List(context.Background(), metav1.ListOptions{
+			LabelSelector: labels.SelectorFromSet(d.matchingServiceLabels).String(),
 			Watch:         false,
 		})
 		if err != nil {
-			log.Println(err)
+			d.logger.Println(err)
 		} else {
 			for _, svc := range services.Items {
 				set := labels.Set(svc.Spec.Selector)
@@ -106,7 +111,7 @@ func (k *KubernetesDiscovery) discovery(clientSet *kubernetes.Clientset, out cha
 
 				pods, err := clientSet.CoreV1().Pods(svc.Namespace).List(context.Background(), listOptions)
 				if err != nil {
-					log.Println(err)
+					d.logger.Println(err)
 					continue
 				}
 
@@ -119,7 +124,7 @@ func (k *KubernetesDiscovery) discovery(clientSet *kubernetes.Clientset, out cha
 					var raftPort v1.ContainerPort
 					for _, container := range pod.Spec.Containers {
 						for _, port := range container.Ports {
-							if port.Name == k.nodePortName {
+							if port.Name == d.nodePortName {
 								raftPort = port
 								break
 							}
@@ -147,28 +152,32 @@ func (k *KubernetesDiscovery) discovery(clientSet *kubernetes.Clientset, out cha
 	}
 }
 
-func (k *KubernetesDiscovery) SupportsNodeAutoRemoval() bool {
+func (d *KubernetesDiscovery) SupportsNodeAutoRemoval() bool {
 	return true
 }
 
-func (k *KubernetesDiscovery) Stop() error {
-	k.mu.Lock()
-	done := k.done
-	k.mu.Unlock()
+func (d *KubernetesDiscovery) SetLogger(logger *log.Logger) {
+	d.logger = logger
+}
+
+func (d *KubernetesDiscovery) Stop() error {
+	d.mu.Lock()
+	done := d.done
+	d.mu.Unlock()
 
 	if done == nil {
 		return nil
 	}
 
-	k.stopOnce.Do(func() {
+	d.stopOnce.Do(func() {
 		close(done)
 	})
-	k.wg.Wait()
+	d.wg.Wait()
 
-	k.mu.Lock()
-	k.discoveryCh = nil
-	k.done = nil
-	k.mu.Unlock()
+	d.mu.Lock()
+	d.discoveryCh = nil
+	d.done = nil
+	d.mu.Unlock()
 
 	return nil
 }

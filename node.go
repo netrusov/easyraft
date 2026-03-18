@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	transport "github.com/Jille/raft-grpc-transport"
+	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/memberlist"
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
@@ -42,7 +42,7 @@ type Node struct {
 	Serializer       serializer.Serializer
 	memberlist       *memberlist.Memberlist
 	memberlistConfig *memberlist.Config
-	logger           *log.Logger
+	logger           hclog.Logger
 	snapshotEnabled  bool
 	hasExistingState bool
 	bootstrap        bool
@@ -76,20 +76,17 @@ type Config struct {
 	Bootstrap            bool
 	FormationTimeout     time.Duration
 	ResolveAdvertiseAddr string
-	Logger               *log.Logger
+	Logger               hclog.Logger
 }
 
 func DefaultConfig() *Config {
-	logger := log.Default()
-	logger.SetPrefix("[EasyRaft] ")
-
 	return &Config{
 		RaftPort:         defaultRaftPort,
 		DiscoveryPort:    defaultDiscoveryPort,
 		DataDir:          defaultDataDir,
 		Services:         []fsm.FSMService{fsm.NewInMemoryMapService()},
 		Serializer:       serializer.NewMsgPackSerializer(),
-		Logger:           logger,
+		Logger:           defaultLogger(),
 		Bootstrap:        false,
 		FormationTimeout: defaultFormationTimeout,
 	}
@@ -138,6 +135,8 @@ func NewNode(cfg *Config) (*Node, error) {
 	raftLogCacheSize := defaultRaftLogCacheSize
 	raftConf.LogLevel = defaultRaftLogLevel
 
+	raftConf.Logger = cfg.Logger.Named("raft")
+
 	// stable/log/snapshot store config
 	stableStoreFile := filepath.Join(cfg.DataDir, "store.boltdb")
 
@@ -167,11 +166,12 @@ func NewNode(cfg *Config) (*Node, error) {
 	)
 
 	sm := fsm.NewRoutingFSM(cfg.Services)
-	sm.Init(cfg.Serializer)
+	sm.Init(cfg.Serializer, standardLogger(cfg.Logger.Named("fsm")))
 
 	memberlistConfig := memberlist.DefaultWANConfig()
 	memberlistConfig.BindPort = cfg.DiscoveryPort
 	memberlistConfig.Name = fmt.Sprintf("%s:%d", nodeID, cfg.RaftPort)
+	memberlistConfig.Logger = standardLogger(cfg.Logger.Named("memberlist"))
 
 	hasExistingState, err := raft.HasExistingState(logStore, stableStore, snapshotStore)
 	if err != nil {
@@ -182,6 +182,8 @@ func NewNode(cfg *Config) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	cfg.DiscoveryMethod.SetLogger(standardLogger(cfg.Logger.Named("discovery")))
 
 	node := &Node{
 		ID:               nodeID,
@@ -194,7 +196,7 @@ func NewNode(cfg *Config) (*Node, error) {
 		DiscoveryPort:    cfg.DiscoveryPort,
 		DiscoveryMethod:  cfg.DiscoveryMethod,
 		memberlistConfig: memberlistConfig,
-		logger:           cfg.Logger,
+		logger:           cfg.Logger.Named("node"),
 		snapshotEnabled:  cfg.SnapshotEnabled,
 		hasExistingState: hasExistingState,
 		bootstrap:        cfg.Bootstrap,
@@ -218,7 +220,7 @@ func (n *Node) Start(ctx context.Context) error {
 	n.stopping.Store(false)
 	n.mu.Unlock()
 
-	n.logger.Println("Starting Node...")
+	n.logger.Info("starting node")
 
 	grpcListen, err := net.Listen("tcp", n.address)
 	if err != nil {
@@ -237,7 +239,7 @@ func (n *Node) Start(ctx context.Context) error {
 	go func() {
 		if err := grpcServer.Serve(grpcListen); err != nil {
 			if !n.stopping.Load() {
-				n.logger.Printf("Raft server stopped with error: %q\n", err.Error())
+				n.logger.Error("raft server stopped with error", "error", err)
 			}
 		}
 	}()
@@ -299,7 +301,9 @@ func (n *Node) Start(ctx context.Context) error {
 	go n.handleDiscoveredNodes(n.replayDiscoveredPeers(bufferedPeers, discoveryChan))
 
 	n.hasExistingState = true
-	n.logger.Printf("Node started on port %d and discovery port %d\n", n.RaftPort, n.DiscoveryPort)
+
+	n.logger.Info("node started", "raft_port", n.RaftPort, "discovery_port", n.DiscoveryPort)
+
 	return nil
 }
 
@@ -319,16 +323,16 @@ func (n *Node) Stop(ctx context.Context) (shutdownErr error) {
 	snapshotEnabled := n.snapshotEnabled
 	n.mu.Unlock()
 
-	n.logger.Println("Stopping Node...")
+	n.logger.Info("stopping node")
 
 	if snapshotEnabled && raftNode != nil {
-		n.logger.Println("Creating snapshot...")
+		n.logger.Info("creating snapshot")
 
 		err := runWithContext(ctx, func() error {
 			return raftNode.Snapshot().Error()
 		})
 		if err != nil {
-			n.logger.Println("Failed to create snapshot!")
+			n.logger.Error("failed to create snapshot", "error", err)
 			shutdownErr = errors.Join(shutdownErr, err)
 		}
 	}
@@ -345,16 +349,16 @@ func (n *Node) Stop(ctx context.Context) (shutdownErr error) {
 			return list.Leave(10 * time.Second)
 		})
 		if err != nil {
-			n.logger.Printf("Failed to leave from discovery: %q\n", err.Error())
+			n.logger.Error("failed to leave from discovery", "error", err)
 			shutdownErr = errors.Join(shutdownErr, err)
 		}
 
 		err = runWithContext(ctx, list.Shutdown)
 		if err != nil {
-			n.logger.Printf("Failed to shutdown discovery: %q\n", err.Error())
+			n.logger.Error("failed to shutdown discovery", "error", err)
 			shutdownErr = errors.Join(shutdownErr, err)
 		} else {
-			n.logger.Println("Discovery stopped")
+			n.logger.Info("discovery stopped")
 		}
 	}
 
@@ -363,10 +367,10 @@ func (n *Node) Stop(ctx context.Context) (shutdownErr error) {
 			return raftNode.Shutdown().Error()
 		})
 		if err != nil {
-			n.logger.Printf("Failed to shutdown Raft: %q\n", err.Error())
+			n.logger.Error("failed to shutdown raft", "error", err)
 			shutdownErr = errors.Join(shutdownErr, err)
 		} else {
-			n.logger.Println("Raft stopped")
+			n.logger.Info("raft stopped")
 		}
 	}
 
@@ -375,7 +379,7 @@ func (n *Node) Stop(ctx context.Context) (shutdownErr error) {
 		if err != nil {
 			shutdownErr = errors.Join(shutdownErr, err)
 		} else {
-			n.logger.Println("Raft Server stopped")
+			n.logger.Info("raft server stopped")
 		}
 	}
 
@@ -384,7 +388,7 @@ func (n *Node) Stop(ctx context.Context) (shutdownErr error) {
 	n.GrpcServer = nil
 	n.mu.Unlock()
 
-	n.logger.Println("Node Stopped!")
+	n.logger.Info("node stopped")
 
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		shutdownErr = errors.Join(shutdownErr, ctxErr)
@@ -572,7 +576,7 @@ func (n *Node) handleDiscoveredNodes(discoveryChan <-chan string) {
 			peerHost := strings.Split(peer, ":")[0]
 			peerDiscoveryAddr := fmt.Sprintf("%s:%d", peerHost, details.DiscoveryPort)
 			if _, err = n.memberlist.Join([]string{peerDiscoveryAddr}); err != nil {
-				log.Printf("failed to join to cluster using discovery address: %s\n", peerDiscoveryAddr)
+				n.logger.Error("failed to join cluster using discovery address", "address", peerDiscoveryAddr, "error", err)
 			}
 		}
 	}
@@ -591,7 +595,7 @@ func (n *Node) NotifyJoin(node *memberlist.Node) {
 	result := n.Raft.AddVoter(raft.ServerID(nodeID), raft.ServerAddress(nodeAddr), 0, 0)
 
 	if result.Error() != nil {
-		log.Println(result.Error().Error())
+		n.logger.Error("failed to add voter", "node_id", nodeID, "address", nodeAddr, "error", result.Error())
 	}
 }
 
@@ -611,7 +615,7 @@ func (n *Node) NotifyLeave(node *memberlist.Node) {
 
 	err := result.Error()
 	if err != nil {
-		n.logger.Printf("Failed to remove Raft node: %q\n", err.Error())
+		n.logger.Error("failed to remove raft node", "node_id", nodeID, "error", err)
 	}
 }
 

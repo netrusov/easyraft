@@ -1,6 +1,8 @@
 package fsm
 
 import (
+	"log"
+
 	"github.com/hashicorp/raft"
 
 	"github.com/netrusov/easyraft/serializer"
@@ -12,7 +14,7 @@ type FSM interface {
 
 	// Init is used to pass the original serializer from EasyRaft Node to be able to deserialize messages
 	// coming from other nodes
-	Init(ser serializer.Serializer)
+	Init(ser serializer.Serializer, logger *log.Logger)
 }
 
 // FSMService interface makes it easier to build State Machines

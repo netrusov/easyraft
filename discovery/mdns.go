@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"log"
 	"math/rand"
 	"net"
 	"strconv"
@@ -18,6 +19,7 @@ const (
 
 type MDNSDiscovery struct {
 	delayTime time.Duration
+	logger    *log.Logger
 
 	mu          sync.Mutex
 	discoveryCh chan string
@@ -35,6 +37,10 @@ func NewMDNSDiscovery() DiscoveryMethod {
 }
 
 func (d *MDNSDiscovery) Start(nodeID string, nodePort int) (<-chan string, error) {
+	if d.logger == nil {
+		d.logger = log.Default()
+	}
+
 	mdnsServer, err := d.exposeMDNS(nodeID, nodePort)
 	if err != nil {
 		return nil, err
@@ -94,6 +100,7 @@ func (d *MDNSDiscovery) discovery(out chan string, done <-chan struct{}, mdnsSer
 		params := mdns.DefaultParams(mdnsServiceName)
 		params.Domain = mdnsDomain
 		params.Entries = entries
+		params.Logger = d.logger
 
 		if err := mdns.QueryContext(ctx, params); err != nil {
 			select {
@@ -127,11 +134,18 @@ func (d *MDNSDiscovery) exposeMDNS(nodeID string, nodePort int) (*mdns.Server, e
 		return nil, err
 	}
 
-	return mdns.NewServer(&mdns.Config{Zone: service})
+	return mdns.NewServer(&mdns.Config{
+		Zone:   service,
+		Logger: d.logger,
+	})
 }
 
 func (d *MDNSDiscovery) SupportsNodeAutoRemoval() bool {
 	return true
+}
+
+func (d *MDNSDiscovery) SetLogger(logger *log.Logger) {
+	d.logger = logger
 }
 
 func (d *MDNSDiscovery) Stop() error {

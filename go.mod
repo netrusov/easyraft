@@ -1,9 +1,10 @@
 module github.com/netrusov/easyraft
 
-go 1.26.0
+go 1.25.0
 
 require (
 	github.com/Jille/raft-grpc-transport v1.6.1
+	github.com/hashicorp/go-hclog v1.6.3
 	github.com/hashicorp/mdns v1.0.6
 	github.com/hashicorp/memberlist v0.5.4
 	github.com/hashicorp/raft v1.7.3
@@ -44,7 +45,6 @@ require (
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
-	github.com/hashicorp/go-hclog v1.6.3 // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-metrics v0.5.4 // indirect
 	github.com/hashicorp/go-msgpack v1.1.5 // indirect

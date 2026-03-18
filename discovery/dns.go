@@ -17,6 +17,7 @@ type DNSDiscovery struct {
 	dnsName   string
 	port      int
 	delayTime time.Duration
+	logger    *log.Logger
 
 	mu          sync.Mutex
 	discoveryCh chan string
@@ -40,6 +41,10 @@ func NewDNSDiscovery(dnsName string, port int) DiscoveryMethod {
 }
 
 func (d *DNSDiscovery) Start(_ string, _ int) (<-chan string, error) {
+	if d.logger == nil {
+		d.logger = log.Default()
+	}
+
 	out := make(chan string)
 	done := make(chan struct{})
 
@@ -81,6 +86,10 @@ func (d *DNSDiscovery) SupportsNodeAutoRemoval() bool {
 	return true
 }
 
+func (d *DNSDiscovery) SetLogger(logger *log.Logger) {
+	d.logger = logger
+}
+
 func (d *DNSDiscovery) discovery(out chan string, done <-chan struct{}) {
 	defer d.wg.Done()
 	defer close(out)
@@ -97,7 +106,7 @@ func (d *DNSDiscovery) discovery(out chan string, done <-chan struct{}) {
 
 		ips, err := net.LookupHost(d.dnsName)
 		if err != nil {
-			log.Printf("DNS lookup failed for %s: %v\n", d.dnsName, err)
+			d.logger.Printf("DNS lookup failed for %s: %v\n", d.dnsName, err)
 		}
 
 		for _, ip := range ips {
