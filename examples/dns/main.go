@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
+	"time"
 
 	"github.com/netrusov/easyraft"
 	"github.com/netrusov/easyraft/discovery"
@@ -35,11 +39,21 @@ func main() {
 		panic(err)
 	}
 
-	_, err = node.Start()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	err = node.Start(ctx)
 	if err != nil {
 		panic(err)
 	}
-	defer node.Stop()
 
-	server.ListenAndServe(httpPort, node)
+	if err := server.ListenAndServe(ctx, httpPort, node); err != nil {
+		panic(err)
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := node.Stop(shutdownCtx); err != nil {
+		panic(err)
+	}
 }

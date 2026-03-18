@@ -41,6 +41,11 @@ is the only one built-in at the moment)
 
 ```go
 import (
+  "context"
+  "os/signal"
+  "syscall"
+  "time"
+
   "github.com/netrusov/easyraft"
   "github.com/netrusov/easyraft/discovery"
   "github.com/netrusov/easyraft/fsm"
@@ -65,11 +70,16 @@ func main() {
     if err != nil {
         panic(err)
     }
-    stoppedCh, err := node.Start()
+    ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+    defer stop()
+
+    err = node.Start(ctx)
     if err != nil {
         panic(err)
     }
-    defer node.Stop()
+    shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+    defer cancel()
+    defer node.Stop(shutdownCtx)
 }
 ```
 

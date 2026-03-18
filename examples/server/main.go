@@ -6,16 +6,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/netrusov/easyraft"
 	"github.com/netrusov/easyraft/fsm"
 )
 
-func ListenAndServe(httpPort int, node *easyraft.Node) {
+func ListenAndServe(ctx context.Context, httpPort int, node *easyraft.Node) error {
 	http.HandleFunc("/put", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -70,14 +67,10 @@ func ListenAndServe(httpPort int, node *easyraft.Node) {
 	go func() {
 		log.Printf("HTTP server listening on port %d", httpPort)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatal(err)
+			log.Printf("HTTP server stopped with error: %v", err)
 		}
 	}()
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-
-	<-sigs
-
-	server.Shutdown(context.Background())
+	<-ctx.Done()
+	return server.Shutdown(context.Background())
 }

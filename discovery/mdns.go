@@ -2,10 +2,10 @@ package discovery
 
 import (
 	"context"
-	"log"
 	"math/rand"
 	"net"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/mdns"
@@ -17,83 +17,109 @@ const (
 )
 
 type MDNSDiscovery struct {
-	delayTime     time.Duration
-	nodeID        string
-	nodePort      int
-	mdnsServer    *mdns.Server
-	discoveryChan chan string
-	stopChan      chan bool
+	delayTime time.Duration
+
+	mu          sync.Mutex
+	discoveryCh chan string
+	done        chan struct{}
+	stopOnce    sync.Once
+	wg          sync.WaitGroup
 }
 
 func NewMDNSDiscovery() DiscoveryMethod {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	delayTime := time.Duration(r.Intn(5)+1) * time.Second
+	delayTime := time.Duration(rand.Intn(5)+1) * time.Second
 
 	return &MDNSDiscovery{
-		delayTime:     delayTime,
-		discoveryChan: make(chan string),
-		stopChan:      make(chan bool),
+		delayTime: delayTime,
 	}
 }
 
-func (d *MDNSDiscovery) Start(nodeID string, nodePort int) (chan string, error) {
-	d.nodeID, d.nodePort = nodeID, nodePort
-	if d.discoveryChan == nil {
-		d.discoveryChan = make(chan string)
-	}
-
-	go d.discovery()
-
-	return d.discoveryChan, nil
-}
-
-func (d *MDNSDiscovery) discovery() {
-	// expose mdns server
-	mdnsServer, err := d.exposeMDNS()
+func (d *MDNSDiscovery) Start(nodeID string, nodePort int) (<-chan string, error) {
+	mdnsServer, err := d.exposeMDNS(nodeID, nodePort)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
-	d.mdnsServer = mdnsServer
+
+	out := make(chan string)
+	done := make(chan struct{})
+
+	d.mu.Lock()
+	d.discoveryCh = out
+	d.done = done
+	d.stopOnce = sync.Once{}
+	d.mu.Unlock()
+
+	d.wg.Add(1)
+	go d.discovery(out, done, mdnsServer)
+
+	return out, nil
+}
+
+func (d *MDNSDiscovery) discovery(out chan string, done <-chan struct{}, mdnsServer *mdns.Server) {
+	defer d.wg.Done()
+	defer close(out)
+	defer mdnsServer.Shutdown()
 
 	entries := make(chan *mdns.ServiceEntry)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var readers sync.WaitGroup
+	readers.Add(1)
 	go func() {
+		defer readers.Done()
 		for {
 			select {
-			case <-d.stopChan:
-				break
-			case entry := <-entries:
-				d.discoveryChan <- net.JoinHostPort(entry.AddrV4.String(), strconv.Itoa(entry.Port))
+			case <-done:
+				return
+			case entry, ok := <-entries:
+				if !ok || entry == nil || entry.AddrV4 == nil {
+					continue
+				}
+
+				addr := net.JoinHostPort(entry.AddrV4.String(), strconv.Itoa(entry.Port))
+				select {
+				case out <- addr:
+				case <-done:
+					return
+				}
 			}
 		}
 	}()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	for {
-		select {
-		case <-d.stopChan:
-			cancel()
-			break
-		default:
-			params := mdns.DefaultParams(mdnsServiceName)
-			params.Domain = mdnsDomain
-			params.Entries = entries
+	ticker := time.NewTicker(d.delayTime)
+	defer ticker.Stop()
 
-			err = mdns.QueryContext(ctx, params)
-			if err != nil {
-				log.Printf("Error during mDNS lookup: %v\n", err)
+	for {
+		params := mdns.DefaultParams(mdnsServiceName)
+		params.Domain = mdnsDomain
+		params.Entries = entries
+
+		if err := mdns.QueryContext(ctx, params); err != nil {
+			select {
+			case <-done:
+				readers.Wait()
+				return
+			default:
 			}
-			time.Sleep(d.delayTime)
+		}
+
+		select {
+		case <-done:
+			readers.Wait()
+			return
+		case <-ticker.C:
 		}
 	}
 }
 
-func (d *MDNSDiscovery) exposeMDNS() (*mdns.Server, error) {
+func (d *MDNSDiscovery) exposeMDNS(nodeID string, nodePort int) (*mdns.Server, error) {
 	service, err := mdns.NewMDNSService(
-		d.nodeID,
+		nodeID,
 		mdnsServiceName,
 		mdnsDomain,
 		"",
-		d.nodePort,
+		nodePort,
 		nil,
 		[]string{"txtv=0", "lo=1", "la=2"},
 	)
@@ -108,8 +134,24 @@ func (d *MDNSDiscovery) SupportsNodeAutoRemoval() bool {
 	return true
 }
 
-func (d *MDNSDiscovery) Stop() {
-	d.stopChan <- true
-	d.mdnsServer.Shutdown()
-	close(d.discoveryChan)
+func (d *MDNSDiscovery) Stop() error {
+	d.mu.Lock()
+	done := d.done
+	d.mu.Unlock()
+
+	if done == nil {
+		return nil
+	}
+
+	d.stopOnce.Do(func() {
+		close(done)
+	})
+	d.wg.Wait()
+
+	d.mu.Lock()
+	d.discoveryCh = nil
+	d.done = nil
+	d.mu.Unlock()
+
+	return nil
 }

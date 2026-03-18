@@ -1,6 +1,7 @@
 package easyraft
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -38,13 +40,20 @@ type Node struct {
 	DiscoveryMethod  discovery.DiscoveryMethod
 	TransportManager *transport.Manager
 	Serializer       serializer.Serializer
-	mList            *memberlist.Memberlist
-	discoveryConfig  *memberlist.Config
-	stopped          *uint32
+	memberlist       *memberlist.Memberlist
+	memberlistConfig *memberlist.Config
 	logger           *log.Logger
-	stopCh           chan any
 	snapshotEnabled  bool
+
+	mu       sync.Mutex
+	started  bool
+	stopping atomic.Bool
 }
+
+const (
+	defaultRaftLogCacheSize = 512
+	defaultRaftLogLevel     = "Info"
+)
 
 // NewNode returns an EasyRaft node
 func NewNode(raftPort, discoveryPort int, dataDir string, services []fsm.FSMService, serializer serializer.Serializer, discoveryMethod discovery.DiscoveryMethod, snapshotEnabled bool, resolveAdvertiseAddr string) (*Node, error) {
@@ -57,26 +66,27 @@ func NewNode(raftPort, discoveryPort int, dataDir string, services []fsm.FSMServ
 
 	// default raft config
 	addr := net.JoinHostPort(advertiseAddr, strconv.Itoa(raftPort))
-	nodeId := uid.New(50)
+	nodeID := uid.New(50)
+
 	raftConf := raft.DefaultConfig()
-	raftConf.LocalID = raft.ServerID(nodeId)
-	raftLogCacheSize := 512
-	raftConf.LogLevel = "Info"
+	raftConf.LocalID = raft.ServerID(nodeID)
+	raftLogCacheSize := defaultRaftLogCacheSize
+	raftConf.LogLevel = defaultRaftLogLevel
 
 	// stable/log/snapshot store config
 	if !util.IsDir(dataDir) {
-		err := util.RemoveCreateDir(dataDir)
-		if err != nil {
+		if err := util.RemoveCreateDir(dataDir); err != nil {
 			return nil, err
 		}
 	}
+
 	stableStoreFile := filepath.Join(dataDir, "store.boltdb")
 	if util.FileExists(stableStoreFile) {
-		err := os.Remove(stableStoreFile)
-		if err != nil {
+		if err := os.Remove(stableStoreFile); err != nil {
 			return nil, err
 		}
 	}
+
 	stableStore, err := raftboltdb.NewBoltStore(stableStoreFile)
 	if err != nil {
 		return nil, err
@@ -95,7 +105,6 @@ func NewNode(raftPort, discoveryPort int, dataDir string, services []fsm.FSMServ
 		return nil, errors.New("snapshots are not supported at the moment")
 	}
 
-	// grpc transport
 	grpcTransport := transport.New(
 		raft.ServerAddress(addr),
 		[]grpc.DialOption{
@@ -103,55 +112,55 @@ func NewNode(raftPort, discoveryPort int, dataDir string, services []fsm.FSMServ
 		},
 	)
 
-	// init FSM
 	sm := fsm.NewRoutingFSM(services)
 	sm.Init(serializer)
 
-	// memberlist config
-	mlConfig := memberlist.DefaultWANConfig()
-	mlConfig.BindPort = discoveryPort
-	mlConfig.Name = fmt.Sprintf("%s:%d", nodeId, raftPort)
+	memberlistConfig := memberlist.DefaultWANConfig()
+	memberlistConfig.BindPort = discoveryPort
+	memberlistConfig.Name = fmt.Sprintf("%s:%d", nodeID, raftPort)
 
-	// raft server
 	raftServer, err := raft.NewRaft(raftConf, sm, logStore, stableStore, snapshotStore, grpcTransport.Transport())
 	if err != nil {
 		return nil, err
 	}
 
-	// logging
 	logger := log.Default()
 	logger.SetPrefix("[EasyRaft] ")
 
-	// initial stopped flag
-	var stopped uint32
-
-	return &Node{
-		ID:               nodeId,
-		RaftPort:         raftPort,
+	node := &Node{
+		ID:               nodeID,
 		address:          addr,
 		dataDir:          dataDir,
 		Raft:             raftServer,
+		RaftPort:         raftPort,
 		TransportManager: grpcTransport,
 		Serializer:       serializer,
 		DiscoveryPort:    discoveryPort,
 		DiscoveryMethod:  discoveryMethod,
-		discoveryConfig:  mlConfig,
+		memberlistConfig: memberlistConfig,
 		logger:           logger,
-		stopped:          &stopped,
 		snapshotEnabled:  snapshotEnabled,
-	}, nil
+	}
+
+	return node, nil
 }
 
-// Start starts the Node and returns a channel that indicates, that the node has been stopped properly
-func (n *Node) Start() (chan any, error) {
-	n.logger.Println("Starting Node...")
-	// set stopped as false
-	if atomic.LoadUint32(n.stopped) == 1 {
-		atomic.StoreUint32(n.stopped, 0)
+func (n *Node) Start(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	n.stopCh = make(chan any, 1)
 
-	// raft server
+	n.mu.Lock()
+	if n.started {
+		n.mu.Unlock()
+		return errors.New("node already started")
+	}
+	n.started = true
+	n.stopping.Store(false)
+	n.mu.Unlock()
+
+	n.logger.Println("Starting Node...")
+
 	configuration := raft.Configuration{
 		Servers: []raft.Server{
 			{
@@ -160,132 +169,209 @@ func (n *Node) Start() (chan any, error) {
 			},
 		},
 	}
-	f := n.Raft.BootstrapCluster(configuration)
-	err := f.Error()
-	if err != nil {
-		return nil, err
+
+	if err := n.Raft.BootstrapCluster(configuration).Error(); err != nil {
+		n.markStopped()
+		return err
 	}
 
-	// memberlist discovery
-	n.discoveryConfig.Events = n
-	list, err := memberlist.Create(n.discoveryConfig)
+	n.memberlistConfig.Events = n
+	list, err := memberlist.Create(n.memberlistConfig)
 	if err != nil {
-		return nil, err
+		n.markStopped()
+		return err
 	}
-	n.mList = list
+	n.memberlist = list
 
-	// grpc server
 	grpcListen, err := net.Listen("tcp", n.address)
 	if err != nil {
-		return nil, err
+		_ = list.Shutdown()
+		n.memberlist = nil
+		n.markStopped()
+		return err
 	}
+
 	grpcServer := grpc.NewServer()
 	n.GrpcServer = grpcServer
 
-	// register management services
 	n.TransportManager.Register(grpcServer)
 
-	// register client services
 	clientGrpcServer := NewClientGrpcService(n)
 	ergrpc.RegisterRaftServer(grpcServer, clientGrpcServer)
 
-	// discovery method
 	discoveryChan, err := n.DiscoveryMethod.Start(n.ID, n.RaftPort)
 	if err != nil {
-		return nil, err
+		_ = grpcListen.Close()
+		_ = list.Shutdown()
+		n.memberlist = nil
+		n.GrpcServer = nil
+		n.markStopped()
+		return err
 	}
 	go n.handleDiscoveredNodes(discoveryChan)
 
-	// serve grpc
 	go func() {
 		if err := grpcServer.Serve(grpcListen); err != nil {
-			if atomic.LoadUint32(n.stopped) == 0 {
+			if !n.stopping.Load() {
 				n.logger.Printf("Raft server stopped with error: %q\n", err.Error())
 			}
 		}
 	}()
 
 	n.logger.Printf("Node started on port %d and discovery port %d\n", n.RaftPort, n.DiscoveryPort)
-
-	return n.stopCh, nil
+	return nil
 }
 
-// Stop stops the node and notifies on stopped channel returned in Start
-func (n *Node) Stop() {
-	if !atomic.CompareAndSwapUint32(n.stopped, 0, 1) {
-		return
+// Stop stops the node gracefully.
+func (n *Node) Stop(ctx context.Context) (shutdownErr error) {
+	n.mu.Lock()
+	if !n.started {
+		n.mu.Unlock()
+		return nil
 	}
+	n.started = false
+	n.stopping.Store(true)
+	list := n.memberlist
+	raftNode := n.Raft
+	grpcServer := n.GrpcServer
+	discoveryMethod := n.DiscoveryMethod
+	snapshotEnabled := n.snapshotEnabled
+	n.mu.Unlock()
 
-	if n.snapshotEnabled && n.Raft != nil {
-		n.logger.Println("Creating snapshot...")
-		err := n.Raft.Snapshot().Error()
-		if err != nil {
-			n.logger.Println("Failed to create snapshot!")
-		}
-	}
 	n.logger.Println("Stopping Node...")
 
-	if n.DiscoveryMethod != nil {
-		n.DiscoveryMethod.Stop()
+	if snapshotEnabled && raftNode != nil {
+		n.logger.Println("Creating snapshot...")
+
+		err := runWithContext(ctx, func() error {
+			return raftNode.Snapshot().Error()
+		})
+		if err != nil {
+			n.logger.Println("Failed to create snapshot!")
+			shutdownErr = errors.Join(shutdownErr, err)
+		}
 	}
 
-	if n.mList != nil {
-		err := n.mList.Leave(10 * time.Second)
+	if discoveryMethod != nil {
+		err := runWithContext(ctx, discoveryMethod.Stop)
+		if err != nil {
+			shutdownErr = errors.Join(shutdownErr, err)
+		}
+	}
+
+	if list != nil {
+		err := runWithContext(ctx, func() error {
+			return list.Leave(10 * time.Second)
+		})
 		if err != nil {
 			n.logger.Printf("Failed to leave from discovery: %q\n", err.Error())
+			shutdownErr = errors.Join(shutdownErr, err)
 		}
-		err = n.mList.Shutdown()
+
+		err = runWithContext(ctx, list.Shutdown)
 		if err != nil {
 			n.logger.Printf("Failed to shutdown discovery: %q\n", err.Error())
+			shutdownErr = errors.Join(shutdownErr, err)
+		} else {
+			n.logger.Println("Discovery stopped")
 		}
-		n.logger.Println("Discovery stopped")
 	}
 
-	if n.Raft != nil {
-		err := n.Raft.Shutdown().Error()
+	if raftNode != nil {
+		err := runWithContext(ctx, func() error {
+			return raftNode.Shutdown().Error()
+		})
 		if err != nil {
 			n.logger.Printf("Failed to shutdown Raft: %q\n", err.Error())
+			shutdownErr = errors.Join(shutdownErr, err)
+		} else {
+			n.logger.Println("Raft stopped")
 		}
-		n.logger.Println("Raft stopped")
 	}
 
-	if n.GrpcServer != nil {
-		n.GrpcServer.GracefulStop()
-		n.logger.Println("Raft Server stopped")
+	if grpcServer != nil {
+		err := gracefulStopGRPC(ctx, grpcServer)
+		if err != nil {
+			shutdownErr = errors.Join(shutdownErr, err)
+		} else {
+			n.logger.Println("Raft Server stopped")
+		}
 	}
+
+	n.mu.Lock()
+	n.memberlist = nil
+	n.GrpcServer = nil
+	n.mu.Unlock()
 
 	n.logger.Println("Node Stopped!")
 
-	if n.stopCh != nil {
-		select {
-		case n.stopCh <- true:
-		default:
-		}
-		close(n.stopCh)
-		n.stopCh = nil
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		shutdownErr = errors.Join(shutdownErr, ctxErr)
+	}
+
+	return shutdownErr
+}
+
+func (n *Node) markStopped() {
+	n.mu.Lock()
+	n.started = false
+	n.stopping.Store(false)
+	n.mu.Unlock()
+}
+
+func runWithContext(ctx context.Context, fn func() error) error {
+	resultCh := make(chan error, 1)
+	go func() {
+		resultCh <- fn()
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-resultCh:
+		return err
+	}
+}
+
+func gracefulStopGRPC(ctx context.Context, server *grpc.Server) error {
+	done := make(chan struct{})
+	go func() {
+		server.GracefulStop()
+		close(done)
+	}()
+
+	select {
+	case <-ctx.Done():
+		server.Stop()
+		<-done
+		return ctx.Err()
+	case <-done:
+		return nil
 	}
 }
 
 // handleDiscoveredNodes handles the discovered Node additions
-func (n *Node) handleDiscoveredNodes(discoveryChan chan string) {
+func (n *Node) handleDiscoveredNodes(discoveryChan <-chan string) {
 	for peer := range discoveryChan {
 		detailsResp, err := GetPeerDetails(peer)
-		if err == nil {
-			serverId := detailsResp.ServerId
-			needToAddNode := true
-			for _, server := range n.Raft.GetConfiguration().Configuration().Servers {
-				if server.ID == raft.ServerID(serverId) || string(server.Address) == peer {
-					needToAddNode = false
-					break
-				}
+		if err != nil {
+			continue
+		}
+
+		serverID := detailsResp.ServerId
+		needToAddNode := true
+		for _, server := range n.Raft.GetConfiguration().Configuration().Servers {
+			if server.ID == raft.ServerID(serverID) || string(server.Address) == peer {
+				needToAddNode = false
+				break
 			}
-			if needToAddNode {
-				peerHost := strings.Split(peer, ":")[0]
-				peerDiscoveryAddr := fmt.Sprintf("%s:%d", peerHost, detailsResp.DiscoveryPort)
-				_, err = n.mList.Join([]string{peerDiscoveryAddr})
-				if err != nil {
-					log.Printf("failed to join to cluster using discovery address: %s\n", peerDiscoveryAddr)
-				}
+		}
+
+		if needToAddNode && n.memberlist != nil {
+			peerHost := strings.Split(peer, ":")[0]
+			peerDiscoveryAddr := fmt.Sprintf("%s:%d", peerHost, detailsResp.DiscoveryPort)
+			if _, err = n.memberlist.Join([]string{peerDiscoveryAddr}); err != nil {
+				log.Printf("failed to join to cluster using discovery address: %s\n", peerDiscoveryAddr)
 			}
 		}
 	}
@@ -294,28 +380,37 @@ func (n *Node) handleDiscoveredNodes(discoveryChan chan string) {
 // NotifyJoin triggered when a new Node has been joined to the cluster (discovery only)
 // and capable of joining the Node to the raft cluster
 func (n *Node) NotifyJoin(node *memberlist.Node) {
+	if !n.isLeader() {
+		return
+	}
+
 	nameParts := strings.Split(node.Name, ":")
-	nodeId, nodePort := nameParts[0], nameParts[1]
+	nodeID, nodePort := nameParts[0], nameParts[1]
 	nodeAddr := fmt.Sprintf("%s:%s", node.Addr, nodePort)
-	if err := n.Raft.VerifyLeader().Error(); err == nil {
-		result := n.Raft.AddVoter(raft.ServerID(nodeId), raft.ServerAddress(nodeAddr), 0, 0)
-		if result.Error() != nil {
-			log.Println(result.Error().Error())
-		}
+	result := n.Raft.AddVoter(raft.ServerID(nodeID), raft.ServerAddress(nodeAddr), 0, 0)
+
+	if result.Error() != nil {
+		log.Println(result.Error().Error())
 	}
 }
 
 // NotifyLeave triggered when a Node becomes unavailable after a period of time
 // it will remove the unavailable Node from the Raft cluster
 func (n *Node) NotifyLeave(node *memberlist.Node) {
-	if n.DiscoveryMethod.SupportsNodeAutoRemoval() {
-		nodeId := strings.Split(node.Name, ":")[0]
-		if err := n.Raft.VerifyLeader().Error(); err == nil {
-			result := n.Raft.RemoveServer(raft.ServerID(nodeId), 0, 0)
-			if result.Error() != nil {
-				log.Println(result.Error().Error())
-			}
-		}
+	if !n.DiscoveryMethod.SupportsNodeAutoRemoval() {
+		return
+	}
+
+	if !n.isLeader() {
+		return
+	}
+
+	nodeID := strings.Split(node.Name, ":")[0]
+	result := n.Raft.RemoveServer(raft.ServerID(nodeID), 0, 0)
+
+	err := result.Error()
+	if err != nil {
+		n.logger.Printf("Failed to remove Raft node: %q\n", err.Error())
 	}
 }
 
@@ -330,11 +425,12 @@ func (n *Node) RaftApply(request any, timeout time.Duration) (any, error) {
 		return nil, err
 	}
 
-	if err := n.Raft.VerifyLeader().Error(); err == nil {
+	if n.isLeader() {
 		result := n.Raft.Apply(payload, timeout)
 		if result.Error() != nil {
 			return nil, result.Error()
 		}
+
 		switch result.Response().(type) {
 		case error:
 			return nil, result.Response().(error)
@@ -348,4 +444,12 @@ func (n *Node) RaftApply(request any, timeout time.Duration) (any, error) {
 		return nil, err
 	}
 	return response, nil
+}
+
+func (n *Node) isLeader() bool {
+	if err := n.Raft.VerifyLeader().Error(); err != nil {
+		return false
+	}
+
+	return true
 }
