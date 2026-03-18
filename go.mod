@@ -6,9 +6,9 @@ require (
 	github.com/Jille/raft-grpc-transport v1.6.1
 	github.com/hashicorp/mdns v1.0.6
 	github.com/hashicorp/memberlist v0.5.4
-	github.com/hashicorp/raft v1.7.0
-	github.com/hashicorp/raft-boltdb v0.0.0-20210422161416-485fa74b0b01
-	github.com/mitchellh/mapstructure v1.4.2
+	github.com/hashicorp/raft v1.7.3
+	github.com/hashicorp/raft-boltdb v0.0.0-20251103221153-05f9dd7a5148
+	github.com/mitchellh/mapstructure v1.5.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
 	github.com/zemirco/uid v0.0.0-20160129141151-3763f3c45832
 	google.golang.org/grpc v1.56.3
