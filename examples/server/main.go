@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/netrusov/easyraft"
@@ -13,7 +15,27 @@ import (
 )
 
 func ListenAndServe(ctx context.Context, httpPort int, node *easyraft.Node) error {
-	http.HandleFunc("/put", func(w http.ResponseWriter, r *http.Request) {
+	leaderCh := node.LeaderCh()
+	var isLeader atomic.Bool
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case val, ok := <-leaderCh:
+				if !ok {
+					log.Println("leadership channel closed")
+					return
+				}
+				isLeader.Store(val)
+			}
+		}
+	}()
+
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("/put", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -35,10 +57,12 @@ func ListenAndServe(ctx context.Context, httpPort int, node *easyraft.Node) erro
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("x-easyraft-leader", strconv.FormatBool(isLeader.Load()))
+
 		json.NewEncoder(w).Encode(result)
 	})
 
-	http.HandleFunc("/get", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/get", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -58,11 +82,14 @@ func ListenAndServe(ctx context.Context, httpPort int, node *easyraft.Node) erro
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("x-easyraft-leader", strconv.FormatBool(isLeader.Load()))
+
 		json.NewEncoder(w).Encode(result)
 	})
 
 	server := &http.Server{
-		Addr: fmt.Sprintf(":%d", httpPort),
+		Addr:    fmt.Sprintf(":%d", httpPort),
+		Handler: mux,
 	}
 	go func() {
 		log.Printf("HTTP server listening on port %d", httpPort)

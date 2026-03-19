@@ -14,8 +14,8 @@ key value store using EasyRaft.
    1. `EASYRAFT_PORT=5003 DISCOVERY_PORT=5004 HTTP_PORT=5005 DATA_DIR="data/er-2" go run main.go`
    1. `EASYRAFT_PORT=5006 DISCOVERY_PORT=5007 HTTP_PORT=5008 DATA_DIR="data/er-3" go run main.go`
 1. Put value on any node:
-   1. `curl --location --request POST 'http://localhost:5008/put?map=test&key=somekey&value=somevaluezzz'`
+   1. `curl -X POST "http://localhost:5008/put?map=test&key=somekey&value=somevalue"`
 1. Get value from all the nodes:
-   1. `curl --location --request GET 'http://localhost:5002/get?map=test&key=somekey'`
-   1. `curl --location --request GET 'http://localhost:5005/get?map=test&key=somekey'`
-   1. `curl --location --request GET 'http://localhost:5008/get?map=test&key=somekey'`
+   1. `curl "http://localhost:5002/get?map=test&key=somekey"`
+   1. `curl "http://localhost:5005/get?map=test&key=somekey"`
+   1. `curl "http://localhost:5008/get?map=test&key=somekey"`

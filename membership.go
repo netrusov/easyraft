@@ -38,7 +38,7 @@ func (n *Node) handleDiscoveredNodes(discoveryChan <-chan string) {
 // NotifyJoin triggered when a new Node has been joined to the cluster (discovery only)
 // and capable of joining the Node to the raft cluster
 func (n *Node) NotifyJoin(node *memberlist.Node) {
-	if !n.isLeader() {
+	if !n.IsLeader() {
 		return
 	}
 
@@ -59,7 +59,7 @@ func (n *Node) NotifyLeave(node *memberlist.Node) {
 		return
 	}
 
-	if !n.isLeader() {
+	if !n.IsLeader() {
 		return
 	}
 
@@ -73,12 +73,4 @@ func (n *Node) NotifyLeave(node *memberlist.Node) {
 }
 
 func (n *Node) NotifyUpdate(_ *memberlist.Node) {
-}
-
-func (n *Node) isLeader() bool {
-	if err := n.raft.VerifyLeader().Error(); err != nil {
-		return false
-	}
-
-	return true
 }

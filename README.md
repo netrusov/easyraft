@@ -65,15 +65,14 @@ func main() {
         Serializer:      serializer.NewMsgPackSerializer(),
         DiscoveryMethod: discovery.NewMDNSDiscovery(),
     })
-
     if err != nil {
         panic(err)
     }
+
     ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
     defer stop()
 
-    err = node.Start(ctx)
-    if err != nil {
+    if err := node.Start(ctx); err != nil {
         panic(err)
     }
 

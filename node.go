@@ -215,7 +215,7 @@ func (n *Node) RaftApply(request any, timeout time.Duration) (any, error) {
 		return nil, err
 	}
 
-	if n.isLeader() {
+	if n.IsLeader() {
 		result := n.raft.Apply(payload, timeout)
 		if result.Error() != nil {
 			return nil, result.Error()
