@@ -29,8 +29,6 @@ const (
 	defaultRaftPort         = 5000
 	defaultDiscoveryPort    = 5001
 	defaultDataDir          = "erdb"
-	defaultRaftLogCacheSize = 512
-	defaultRaftLogLevel     = "Info"
 	defaultFormationTimeout = 5 * time.Second
 )
 

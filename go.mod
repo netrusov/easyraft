@@ -11,7 +11,6 @@ require (
 	github.com/hashicorp/raft-boltdb v0.0.0-20251103221153-05f9dd7a5148
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/vmihailenco/msgpack/v5 v5.4.1
-	github.com/zemirco/uid v0.0.0-20160129141151-3763f3c45832
 	google.golang.org/grpc v1.79.3
 	google.golang.org/protobuf v1.36.11
 	k8s.io/api v0.35.2

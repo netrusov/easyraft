@@ -1,6 +1,7 @@
 package easyraft
 
 import (
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"net"
@@ -17,7 +18,6 @@ import (
 	"github.com/hashicorp/memberlist"
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb"
-	"github.com/zemirco/uid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -52,7 +52,9 @@ type Node struct {
 }
 
 const (
-	nodeIDFileName = "node.id"
+	nodeIDFileName      = "node.id"
+	stableStoreFileName = "store.boltdb"
+	raftLogCacheSize    = 512
 )
 
 // NewNode returns an EasyRaft node
@@ -85,13 +87,10 @@ func NewNode(cfg *Config) (*Node, error) {
 
 	raftConf := raft.DefaultConfig()
 	raftConf.LocalID = raft.ServerID(nodeID)
-	raftLogCacheSize := defaultRaftLogCacheSize
-	raftConf.LogLevel = defaultRaftLogLevel
-
 	raftConf.Logger = cfg.Logger.Named("raft")
 
 	// stable/log/snapshot store config
-	stableStoreFile := filepath.Join(cfg.DataDir, "store.boltdb")
+	stableStoreFile := filepath.Join(cfg.DataDir, stableStoreFileName)
 
 	stableStore, err := raftboltdb.NewBoltStore(stableStoreFile)
 	if err != nil {
@@ -131,7 +130,14 @@ func NewNode(cfg *Config) (*Node, error) {
 		return nil, err
 	}
 
-	raftServer, err := raft.NewRaft(raftConf, sm, logStore, stableStore, snapshotStore, grpcTransport.Transport())
+	raftServer, err := raft.NewRaft(
+		raftConf,
+		sm,
+		logStore,
+		stableStore,
+		snapshotStore,
+		grpcTransport.Transport(),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +184,7 @@ func resolveNodeID(cfg *Config) (string, error) {
 		return nodeID, nil
 	}
 
-	nodeID := uid.New(20)
+	nodeID := rand.Text()
 	if err := persistNodeID(cfg.DataDir, nodeID); err != nil {
 		return "", err
 	}
