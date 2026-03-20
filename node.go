@@ -28,18 +28,22 @@ import (
 )
 
 type Node struct {
-	ID               string
-	raftPort         int
-	discoveryPort    int
-	address          string
+	ID string
+
+	advertiseAddr string
+	advertisePort int
+
+	discoveryPort   int
+	discoveryMethod discovery.DiscoveryMethod
+
+	memberlist       *memberlist.Memberlist
+	memberlistConfig *memberlist.Config
+
 	dataDir          string
 	raft             *raft.Raft
 	grpcServer       *grpc.Server
-	discoveryMethod  discovery.DiscoveryMethod
 	transportManager *transport.Manager
 	serializer       serializer.Serializer
-	memberlist       *memberlist.Memberlist
-	memberlistConfig *memberlist.Config
 	logger           hclog.Logger
 	snapshotEnabled  bool
 	hasExistingState bool
@@ -67,15 +71,22 @@ func NewNode(cfg *Config) (*Node, error) {
 		cfg.Logger = defaultLogger()
 	}
 
-	advertiseAddr := "0.0.0.0"
+	advertiseHost := cfg.AdvertiseAddr
 
 	// resolve which address will be used to announce to members
-	if cfg.ResolveAdvertiseAddr != "" {
-		advertiseAddr = util.GetOutboundIP(cfg.ResolveAdvertiseAddr).String()
+	if advertiseHost == "" || advertiseHost == "0.0.0.0" || advertiseHost == "::" {
+		if cfg.AdvertiseAddrProbeHost != "" {
+			ip, err := util.GetOutboundIP(cfg.AdvertiseAddrProbeHost)
+			if err != nil {
+				return nil, err
+			}
+
+			advertiseHost = ip.String()
+		}
 	}
 
-	// default raft config
-	addr := net.JoinHostPort(advertiseAddr, strconv.Itoa(cfg.RaftPort))
+	advertiseAddr := net.JoinHostPort(advertiseHost, strconv.Itoa(cfg.AdvertisePort))
+
 	if err := os.MkdirAll(cfg.DataDir, os.ModePerm); err != nil {
 		return nil, err
 	}
@@ -111,7 +122,7 @@ func NewNode(cfg *Config) (*Node, error) {
 	}
 
 	grpcTransport := transport.New(
-		raft.ServerAddress(addr),
+		raft.ServerAddress(advertiseAddr),
 		[]grpc.DialOption{
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		},
@@ -120,9 +131,9 @@ func NewNode(cfg *Config) (*Node, error) {
 	sm := fsm.NewRoutingFSM(cfg.Services)
 	sm.Init(cfg.Serializer, standardLogger(cfg.Logger.Named("fsm")))
 
-	memberlistConfig := memberlist.DefaultWANConfig()
+	memberlistConfig := memberlist.DefaultLANConfig()
 	memberlistConfig.BindPort = cfg.DiscoveryPort
-	memberlistConfig.Name = fmt.Sprintf("%s:%d", nodeID, cfg.RaftPort)
+	memberlistConfig.Name = fmt.Sprintf("%s:%d", nodeID, cfg.AdvertisePort)
 	memberlistConfig.Logger = standardLogger(cfg.Logger.Named("memberlist"))
 
 	hasExistingState, err := raft.HasExistingState(logStore, stableStore, snapshotStore)
@@ -145,16 +156,20 @@ func NewNode(cfg *Config) (*Node, error) {
 	cfg.DiscoveryMethod.SetLogger(standardLogger(cfg.Logger.Named("discovery")))
 
 	node := &Node{
-		ID:               nodeID,
-		address:          addr,
+		ID: nodeID,
+
+		advertiseAddr: advertiseAddr,
+		advertisePort: cfg.AdvertisePort,
+
+		discoveryPort:   cfg.DiscoveryPort,
+		discoveryMethod: cfg.DiscoveryMethod,
+
+		memberlistConfig: memberlistConfig,
+
 		dataDir:          cfg.DataDir,
 		raft:             raftServer,
-		raftPort:         cfg.RaftPort,
 		transportManager: grpcTransport,
 		serializer:       cfg.Serializer,
-		discoveryPort:    cfg.DiscoveryPort,
-		discoveryMethod:  cfg.DiscoveryMethod,
-		memberlistConfig: memberlistConfig,
 		logger:           cfg.Logger.Named("node"),
 		snapshotEnabled:  cfg.SnapshotEnabled,
 		hasExistingState: hasExistingState,

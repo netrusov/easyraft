@@ -1,10 +1,10 @@
 package discovery
 
 import (
-	"fmt"
 	"log"
 	"math/rand"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -15,7 +15,6 @@ const (
 
 type DNSDiscovery struct {
 	dnsName   string
-	port      int
 	delayTime time.Duration
 	logger    *log.Logger
 
@@ -26,7 +25,7 @@ type DNSDiscovery struct {
 	wg          sync.WaitGroup
 }
 
-func NewDNSDiscovery(dnsName string, port int) DiscoveryMethod {
+func NewDNSDiscovery(dnsName string) DiscoveryMethod {
 	delayTime := time.Duration(rand.Intn(5)+1) * time.Second
 
 	if dnsName == "" {
@@ -35,12 +34,11 @@ func NewDNSDiscovery(dnsName string, port int) DiscoveryMethod {
 
 	return &DNSDiscovery{
 		dnsName:   dnsName,
-		port:      port,
 		delayTime: delayTime,
 	}
 }
 
-func (d *DNSDiscovery) Start(_ string, _ int) (<-chan string, error) {
+func (d *DNSDiscovery) Start(_ string, advertisePort int) (<-chan string, error) {
 	if d.logger == nil {
 		d.logger = log.Default()
 	}
@@ -55,7 +53,7 @@ func (d *DNSDiscovery) Start(_ string, _ int) (<-chan string, error) {
 	d.mu.Unlock()
 
 	d.wg.Add(1)
-	go d.discovery(out, done)
+	go d.discovery(advertisePort, out, done)
 
 	return out, nil
 }
@@ -90,7 +88,7 @@ func (d *DNSDiscovery) SetLogger(logger *log.Logger) {
 	d.logger = logger
 }
 
-func (d *DNSDiscovery) discovery(out chan string, done <-chan struct{}) {
+func (d *DNSDiscovery) discovery(port int, out chan string, done <-chan struct{}) {
 	defer d.wg.Done()
 	defer close(out)
 
@@ -111,7 +109,7 @@ func (d *DNSDiscovery) discovery(out chan string, done <-chan struct{}) {
 
 		for _, ip := range ips {
 			select {
-			case out <- net.JoinHostPort(ip, fmt.Sprintf("%d", d.port)):
+			case out <- net.JoinHostPort(ip, strconv.Itoa(port)):
 			case <-done:
 				return
 			}

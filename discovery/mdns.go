@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"io"
 	"log"
 	"math/rand"
 	"net"
@@ -16,6 +17,8 @@ const (
 	mdnsServiceName = "_easyraft._tcp"
 	mdnsDomain      = "local."
 )
+
+var voidLogger = log.New(io.Discard, "", 0)
 
 type MDNSDiscovery struct {
 	delayTime time.Duration
@@ -96,12 +99,12 @@ func (d *MDNSDiscovery) discovery(out chan string, done <-chan struct{}, mdnsSer
 	ticker := time.NewTicker(d.delayTime)
 	defer ticker.Stop()
 
-	for {
-		params := mdns.DefaultParams(mdnsServiceName)
-		params.Domain = mdnsDomain
-		params.Entries = entries
-		params.Logger = d.logger
+	params := mdns.DefaultParams(mdnsServiceName)
+	params.Domain = mdnsDomain
+	params.Entries = entries
+	params.Logger = voidLogger
 
+	for {
 		if err := mdns.QueryContext(ctx, params); err != nil {
 			select {
 			case <-done:

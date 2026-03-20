@@ -10,7 +10,7 @@ type DiscoveryMethod interface {
 	SupportsNodeAutoRemoval() bool
 
 	// Start is about to start the discovery method
-	// it returns a channel where the node will consume node addresses ("IP:NodeRaftPort") until the channel gets closed
+	// it returns a channel where the node will consume node addresses ("IP:NodeAdvertisePort") until the channel gets closed
 	Start(nodeID string, nodePort int) (<-chan string, error)
 
 	// Stop should stop the discovery method and all of its goroutines, it should close discovery channel returned in Start

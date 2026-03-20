@@ -28,7 +28,7 @@ func (n *Node) Start(ctx context.Context) error {
 
 	n.logger.Info("starting node")
 
-	grpcListen, err := net.Listen("tcp", n.address)
+	grpcListen, err := net.Listen("tcp", n.advertiseAddr)
 	if err != nil {
 		n.markStopped()
 		return err
@@ -50,7 +50,7 @@ func (n *Node) Start(ctx context.Context) error {
 		}
 	}()
 
-	discoveryChan, err := n.discoveryMethod.Start(n.ID, n.raftPort)
+	discoveryChan, err := n.discoveryMethod.Start(n.ID, n.advertisePort)
 	if err != nil {
 		grpcServer.Stop()
 		n.grpcServer = nil
@@ -108,7 +108,7 @@ func (n *Node) Start(ctx context.Context) error {
 
 	n.hasExistingState = true
 
-	n.logger.Info("node started", "raft_port", n.raftPort, "discovery_port", n.discoveryPort)
+	n.logger.Info("node started", "advertise_addr", n.advertiseAddr, "discovery_port", n.discoveryPort)
 
 	return nil
 }

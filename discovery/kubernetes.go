@@ -35,12 +35,12 @@ type KubernetesDiscovery struct {
 	wg          sync.WaitGroup
 }
 
-func NewKubernetesDiscovery(namespace string, serviceLabels map[string]string, raftPortName string) DiscoveryMethod {
-	if raftPortName == "" {
-		raftPortName = defaultK8sDiscoveryNodePortName
+func NewKubernetesDiscovery(namespace string, serviceLabels map[string]string, nodePortName string) DiscoveryMethod {
+	if nodePortName == "" {
+		nodePortName = defaultK8sDiscoveryNodePortName
 	}
 
-	if serviceLabels == nil || len(serviceLabels) == 0 {
+	if len(serviceLabels) == 0 {
 		serviceLabels = map[string]string{"svcType": defaultK8sDiscoverySvcType}
 	}
 
@@ -49,7 +49,7 @@ func NewKubernetesDiscovery(namespace string, serviceLabels map[string]string, r
 	return &KubernetesDiscovery{
 		namespace:             namespace,
 		matchingServiceLabels: serviceLabels,
-		nodePortName:          raftPortName,
+		nodePortName:          nodePortName,
 		delayTime:             delayTime,
 	}
 }
@@ -121,22 +121,22 @@ func (d *KubernetesDiscovery) discovery(clientSet *kubernetes.Clientset, out cha
 					}
 
 					podIP := pod.Status.PodIP
-					var raftPort v1.ContainerPort
+					var containerPort v1.ContainerPort
 					for _, container := range pod.Spec.Containers {
 						for _, port := range container.Ports {
 							if port.Name == d.nodePortName {
-								raftPort = port
+								containerPort = port
 								break
 							}
 						}
 					}
 
-					if podIP == "" || raftPort.ContainerPort == 0 {
+					if podIP == "" || containerPort.ContainerPort == 0 {
 						continue
 					}
 
 					select {
-					case out <- fmt.Sprintf("%v:%v", podIP, raftPort.ContainerPort):
+					case out <- fmt.Sprintf("%v:%v", podIP, containerPort.ContainerPort):
 					case <-done:
 						return
 					}

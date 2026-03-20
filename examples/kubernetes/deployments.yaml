@@ -79,16 +79,16 @@ spec:
           env:
             - name: DATA_DIR
               value: "data"
-            - name: EASYRAFT_PORT
+            - name: ADVERTISE_PORT
               value: "5000"
-            - name: HTTP_PORT
-              value: "5001"
             - name: DISCOVERY_PORT
+              value: "5001"
+            - name: HTTP_PORT
               value: "5002"
           ports:
             - containerPort: 5000
               name: easyraft
             - containerPort: 5001
-              name: client
-            - containerPort: 5002
               name: discovery
+            - containerPort: 5002
+              name: client

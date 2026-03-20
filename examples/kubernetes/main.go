@@ -15,13 +15,13 @@ import (
 
 func main() {
 	// raft details
-	raftPort, _ := strconv.Atoi(os.Getenv("EASYRAFT_PORT"))
+	advertisePort, _ := strconv.Atoi(os.Getenv("ADVERTISE_PORT"))
 	discoveryPort, _ := strconv.Atoi(os.Getenv("DISCOVERY_PORT"))
 	httpPort, _ := strconv.Atoi(os.Getenv("HTTP_PORT"))
 	dataDir := os.Getenv("DATA_DIR")
 
 	cfg := easyraft.DefaultConfig()
-	cfg.RaftPort = raftPort
+	cfg.AdvertisePort = advertisePort
 	cfg.DiscoveryPort = discoveryPort
 	cfg.DataDir = dataDir
 	cfg.DiscoveryMethod = discovery.NewKubernetesDiscovery("", nil, "")

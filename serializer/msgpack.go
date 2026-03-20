@@ -16,7 +16,7 @@ var msgpackHandle = func() *codec.MsgpackHandle {
 	return &handle
 }()
 
-func NewMsgPackSerializer() Serializer {
+func NewMsgpackSerializer() Serializer {
 	return &MsgpackSerializer{}
 }
 

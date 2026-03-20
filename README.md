@@ -53,16 +53,16 @@ import (
 )
 
 func main() {
-    raftPort := 5000
+    advertisePort := 5000
     discoveryPort := 5001
     dataDir := "s1"
 
     node, err := easyraft.NewNode(easyraft.Config{
-        RaftPort:        raftPort,
+        AdvertisePort:   advertisePort,
         DiscoveryPort:   discoveryPort,
         DataDir:         dataDir,
         Services:        []fsm.FSMService{fsm.NewInMemoryMapService()},
-        Serializer:      serializer.NewMsgPackSerializer(),
+        Serializer:      serializer.NewMsgpackSerializer(),
         DiscoveryMethod: discovery.NewMDNSDiscovery(),
     })
     if err != nil {

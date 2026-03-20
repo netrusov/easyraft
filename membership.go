@@ -2,6 +2,7 @@ package easyraft
 
 import (
 	"fmt"
+	"net"
 	"strings"
 
 	"github.com/hashicorp/memberlist"
@@ -44,7 +45,7 @@ func (n *Node) NotifyJoin(node *memberlist.Node) {
 
 	nameParts := strings.Split(node.Name, ":")
 	nodeID, nodePort := nameParts[0], nameParts[1]
-	nodeAddr := fmt.Sprintf("%s:%s", node.Addr, nodePort)
+	nodeAddr := net.JoinHostPort(node.Addr.String(), nodePort)
 	result := n.raft.AddVoter(raft.ServerID(nodeID), raft.ServerAddress(nodeAddr), 0, 0)
 
 	if result.Error() != nil {
